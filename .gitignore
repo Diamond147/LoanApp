@@ -1,0 +1,19 @@
+# Secrets and Config
+.env
+**/appsettings.json
+**/appsettings.Development.json
+
+# Build folders
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio specific
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Operating System files
+.DS_Store
+Thumbs.db
