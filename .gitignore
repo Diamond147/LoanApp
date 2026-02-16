@@ -7,7 +7,7 @@
 [Bb]in/
 [Oo]bj/
 
-# Visual Studio specific
+# Visual Studio specificgit 
 .vs/
 *.user
 *.suo

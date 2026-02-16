@@ -11,7 +11,6 @@ namespace Domain.DTOs.Emails
         // True = HTML email (with formatting), False = Plain text email
         public bool IsHtml { get; set; } = true;
 
-        // "LoanApproval", "PaymentConfirmation", "LoanRejection". Used for logging and tracking
         public string EmailType { get; set; } = string.Empty;
         public string UserProfileId { get; set; } = string.Empty;
     }

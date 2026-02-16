@@ -1,6 +1,7 @@
 using Application.Services.Implementations;
 using Application.Services.Interfaces;
 using Infrastructure.DbContexts;
+using Infrastructure.ExternalServices;
 using Infrastructure.ExternalServices.Implementations;
 using Infrastructure.ExternalServices.Interfaces;
 using Infrastructure.Repositories.Implementations;
@@ -68,16 +69,25 @@ builder.Services.AddScoped<IPaystackClient>(provider =>
 });
 
 
-// Register email client with Gmail SMTP configuration.
+//// Register email client with Gmail SMTP configuration.
+//builder.Services.AddSingleton<IEmailClient>(provider =>
+//{
+//    var smtpServer = builder.Configuration["Email:SmtpServer"]!;
+//    var smtpPort = int.Parse(builder.Configuration["Email:SmtpPort"]!);
+//    var senderEmail = builder.Configuration["Email:SenderEmail"]!;
+//    var senderPassword = builder.Configuration["Email:SenderPassword"]!;
+//    var senderName = builder.Configuration["Email:SenderName"]!;
+
+//    return new EmailClient(smtpServer, smtpPort, senderEmail, senderPassword, senderName);
+//});
+
+// ADD Azure Email
 builder.Services.AddSingleton<IEmailClient>(provider =>
 {
-    var smtpServer = builder.Configuration["Email:SmtpServer"]!;
-    var smtpPort = int.Parse(builder.Configuration["Email:SmtpPort"]!);
-    var senderEmail = builder.Configuration["Email:SenderEmail"]!;
-    var senderPassword = builder.Configuration["Email:SenderPassword"]!;
-    var senderName = builder.Configuration["Email:SenderName"]!;
+    var connectionString = builder.Configuration["AzureCommunicationService:ConnectionString"]!;
+    var senderEmail = builder.Configuration["AzureCommunicationService:sender"]!;
 
-    return new EmailClient(smtpServer, smtpPort, senderEmail, senderPassword, senderName);
+    return new AzureEmailClient(connectionString, senderEmail);
 });
 
 
@@ -179,8 +189,7 @@ builder.Services.Configure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationSch
 //    .AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
 
 
-
-// Add Authorization with roles
+// Add Authorization with policy
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminPolicy", policy =>

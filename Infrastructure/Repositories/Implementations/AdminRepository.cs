@@ -342,7 +342,8 @@ namespace Infrastructure.Repositories.Repositories
             var pendingLoans = await _context.Loans.CountAsync(l => l.Status == LoanStatus.Pending);
             var approvedLoans = await _context.Loans.CountAsync(l => l.Status == LoanStatus.Approved);
             var rejectedLoans = await _context.Loans.CountAsync(l => l.Status == LoanStatus.Rejected);
-            
+            var paidLoans = await _context.Loans.CountAsync(l => l.Status == LoanStatus.Paid);
+
             var allLoans = await _context.Loans.ToListAsync();
             var totalLoanAmount = allLoans.Sum(l => l.Amount);
 
@@ -360,6 +361,7 @@ namespace Infrastructure.Repositories.Repositories
                 PendingLoans = pendingLoans,
                 ApprovedLoans = approvedLoans,
                 RejectedLoans = rejectedLoans,
+                PaidLoans = paidLoans,
                 TotalLoanAmount = totalLoanAmount,
                 TotalApprovedAmount = totalApprovedAmount,
                 TotalLoanHistories = totalLoanHistories,

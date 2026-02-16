@@ -20,7 +20,7 @@ namespace Infrastructure.Repositories.Repositories
             await _context.SaveChangesAsync();
         }
 
-        //Retrieves the user with all related data(Loans, PreQualifiedLoans).
+        //Retrieves the user with all related data(Loans, LoanHistories).
         public async Task<UserProfile?> GetUserDashboardAsync(string userId)
         {
             var user = await _context.UserProfiles

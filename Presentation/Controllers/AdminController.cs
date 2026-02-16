@@ -1,10 +1,9 @@
-﻿using Application.Exceptions;
-using Application.Services.Interfaces;
+﻿using Application.Services.Interfaces;
 using Domain.DTOs.Payments;
 using Domain.DTOs.Users.RequestDto;
+using Domain.DTOs.Users.ResponseDto;
 using Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Cryptography;
 using System.Text;
@@ -20,19 +19,58 @@ namespace Presentation.Controllers
         private readonly IAdminService _adminService;
         private readonly IPaymentService _paymentService;
         private readonly IConfiguration _configuration;
+        private readonly IDashboardService _dashboardService;
 
-        public AdminController(IAdminService adminService, IPaymentService paymentService, IConfiguration configuration)
+        public AdminController(IAdminService adminService, IPaymentService paymentService, IConfiguration configuration, IDashboardService dashboardService)
         {
             _adminService = adminService;
             _paymentService=paymentService;
             _configuration=configuration;
+            _dashboardService=dashboardService;
         }
 
-        [HttpGet("dashboard")]
+        [HttpGet("dashboardstats")]
         public async Task<IActionResult> GetDashboardStats()
         {
             var stats = await _adminService.GetDashboardStatsAsync();
             return Ok(stats);
+        }
+
+        [HttpGet("filter-users")]
+        public async Task<IActionResult> FilterUsersWithDetails(
+            [FromQuery] string? userId, 
+            [FromQuery] string? email, 
+            [FromQuery] string? mobileNumber, 
+            [FromQuery] string? search, 
+            [FromQuery] string? gender, 
+            [FromQuery] string? nationality)
+        {
+            LoanDashboardDto dashboard;
+
+            if (!string.IsNullOrEmpty(userId))
+                dashboard = await _dashboardService.GetDashboardByIdAsync(userId);
+            else if (!string.IsNullOrEmpty(email))
+                dashboard = await _dashboardService.GetDashboardByEmailAsync(email);
+            else if (!string.IsNullOrEmpty(mobileNumber))
+                dashboard = await _dashboardService.GetDashboardByMobileAsync(mobileNumber);
+            else if (!string.IsNullOrEmpty(search))
+                dashboard = await _dashboardService.SearchDashboardAsync(search);
+
+            else if (!string.IsNullOrEmpty(gender))
+            {
+                var dashboards = await _dashboardService.GetDashboardsByGenderAsync(gender);
+                return Ok(dashboards);
+            }
+            else if (!string.IsNullOrEmpty(nationality))
+            {
+                var dashboards = await _dashboardService.GetDashboardsByNationalityAsync(nationality);
+                return Ok(dashboards);
+            }
+
+            else
+                return BadRequest(new { message = "provide at least one query parameter: userId, email, mobileNumber, search, gender, nationality" });
+
+            return Ok(dashboard);
         }
 
 
@@ -46,15 +84,15 @@ namespace Presentation.Controllers
             return Ok(result);
         }
 
-        [HttpGet("users")]
-        public async Task<IActionResult> GetAllUsers(
-            [FromQuery] int pageSize = 10,
-            [FromQuery] string? continuationToken = null,
-            [FromQuery] string? userId = null)
-        {
-            var result = await _adminService.GetUsersWithContinuationAsync(pageSize, continuationToken, userId);
-            return Ok(result);
-        }
+        //[HttpGet("users")]
+        //public async Task<IActionResult> GetAllUsers(
+        //    [FromQuery] int pageSize = 10,
+        //    [FromQuery] string? continuationToken = null,
+        //    [FromQuery] string? userId = null)
+        //{
+        //    var result = await _adminService.GetUsersWithContinuationAsync(pageSize, continuationToken, userId);
+        //    return Ok(result);
+        //}
 
         [HttpDelete("users/{userId}")]
         public async Task<IActionResult> DeleteUser(string userId)
@@ -106,7 +144,6 @@ namespace Presentation.Controllers
             return CreatedAtAction(nameof(CreatePreQualifiedLoan), new { id = preQualifiedLoan?.Id }, preQualifiedLoan);
         }
 
-
         [HttpGet("prequalifiedloans")]
         public async Task<IActionResult> GetPreQualifiedLoans(
             [FromQuery] string? preQualifiedId = null,
@@ -116,13 +153,13 @@ namespace Presentation.Controllers
             return Ok(allPreQualified);
         }
 
-
         [HttpDelete("prequalifiedloans/{preQualifiedId}")]
         public async Task<IActionResult> DeletePreQualifiedLoan(string preQualifiedId)
         {
             var result = await _adminService.DeletePreQualifiedLoanAsync(preQualifiedId);
             return Ok(new { message = "PreQualified loan deleted successfully" });
         }
+
 
 
         [HttpDelete("histories/{loanHistoryId}")]
@@ -133,14 +170,15 @@ namespace Presentation.Controllers
         }
 
 
+
         // WEBHOOK
         [HttpPost("paystack")]
+        [AllowAnonymous]
         public async Task<IActionResult> PaystackWebhook([FromBody] PaystackWebhookDto payload)
         {
             Request.EnableBuffering(); // Allows reading body multiple times
 
-            // 2. RESET POSITION POINTER TO THE BEGINNING (Crucial!)
-            Request.Body.Position = 0;
+            Request.Body.Position = 0;   // 2. RESET POSITION POINTER TO THE BEGINNING (Crucial!)
 
             using var reader = new StreamReader(Request.Body, Encoding.UTF8, true, 1024, leaveOpen: true);
             var requestBody = await reader.ReadToEndAsync();
@@ -148,7 +186,7 @@ namespace Presentation.Controllers
             Request.Body.Position = 0; // Reset stream position again
 
             Console.WriteLine($"Webhook received at {DateTime.UtcNow}");
-            Console.WriteLine($"Request body length: {requestBody.Length}"); // Check if this is 0
+            Console.WriteLine($"Request body length: {requestBody.Length}");
             Console.WriteLine($"Request body: {requestBody}");
 
             if (string.IsNullOrWhiteSpace(requestBody))

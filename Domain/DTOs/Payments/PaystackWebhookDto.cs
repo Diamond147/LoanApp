@@ -8,11 +8,9 @@ namespace Domain.DTOs.Payments
     // with this data structure. We use it to verify and confirm the payment.
     public class PaystackWebhookDto
     {
-        // "charge.success", "charge.failed", "transfer.success", etc.
         [JsonPropertyName("event")]
         public string Event { get; set; } = string.Empty;
 
-        // The actual payment data. Contains all transaction details
         [JsonPropertyName("data")]
         public PaystackWebhookData Data { get; set; } = new();
     }

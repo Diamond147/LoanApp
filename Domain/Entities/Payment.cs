@@ -2,7 +2,6 @@
 
 namespace Domain.Entities
 {
-    // To track payments
     public class Payment
     {
         public string Id { get; set; } = Guid.NewGuid().ToString();
@@ -23,8 +22,5 @@ namespace Domain.Entities
 
         // User is redirected here, from Paystack, to complete payment
         public string? AuthorizationUrl { get; set; }
-
-        // Used if embedding Paystack inline checkout
-        //public string? AccessCode { get; set; }
     }
 }

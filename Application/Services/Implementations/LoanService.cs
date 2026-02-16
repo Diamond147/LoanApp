@@ -62,7 +62,6 @@ namespace Application.Services.Implementations
                     throw new UnauthorizedAccessException("User is not authenticated");
 
                 var AuthUserId = UserInfo.UserId;
-                //var AuthUserId = GetCurrentUserId();
 
                 var hasUnpaidLoan = await _loanRepository.HasUnpaidLoanAsync(AuthUserId);
                 if (hasUnpaidLoan)

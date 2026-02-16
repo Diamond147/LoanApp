@@ -371,9 +371,9 @@ namespace Application.Services.Implementations
                 var user = await _userRepository.GetUserByIdAsync(loan.UserProfileId);
                 if (user != null)
                 {
-                    #if DEBUG
-                        user.Email = "adesolaopeyemi216@gmail.com";
-                    #endif
+                    //#if DEBUG
+                    //    user.Email = "adesolaopeyemi216@gmail.com";
+                    //#endif
                     if (newStatus == LoanStatus.Approved)
                     {
                         await _emailService.SendLoanApprovalEmailAsync(user, loan);

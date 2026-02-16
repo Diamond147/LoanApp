@@ -7,6 +7,7 @@
         public int PendingLoans { get; set; }
         public int ApprovedLoans { get; set; }
         public int RejectedLoans { get; set; }
+        public int PaidLoans { get; set; }
         public decimal TotalLoanAmount { get; set; }
         public decimal TotalApprovedAmount { get; set; }
         public int TotalLoanHistories { get; set; }

@@ -1,8 +1,6 @@
-﻿using Application.Services.Implementations;
-using Application.Services.Interfaces;
+﻿using Application.Services.Interfaces;
 using Domain.DTOs.Payments;
 using Domain.DTOs.Users.RequestDto;
-using Domain.DTOs.Users.ResponseDto;
 using Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -30,46 +28,12 @@ namespace Presentation.Controllers
             _emailService=emailService;
         }
 
-
-        [HttpGet("dashboards")]
-        public async Task<IActionResult> GetDashboard([FromQuery] string? userId, [FromQuery] string? email, [FromQuery] string? mobileNumber, [FromQuery] string? search, [FromQuery] string? gender, [FromQuery] string? nationality)
-        {
-                LoanDashboardDto dashboard;
-
-                if (!string.IsNullOrEmpty(userId))
-                    dashboard = await _dashboardService.GetDashboardByIdAsync(userId);
-                else if (!string.IsNullOrEmpty(email))
-                    dashboard = await _dashboardService.GetDashboardByEmailAsync(email);
-                else if (!string.IsNullOrEmpty(mobileNumber))
-                    dashboard = await _dashboardService.GetDashboardByMobileAsync(mobileNumber);
-                else if (!string.IsNullOrEmpty(search))
-                    dashboard = await _dashboardService.SearchDashboardAsync(search);
-
-                else if (!string.IsNullOrEmpty(gender))
-                {
-                    var dashboards = await _dashboardService.GetDashboardsByGenderAsync(gender);
-                    return Ok(dashboards);
-                }
-                else if (!string.IsNullOrEmpty(nationality))
-                {
-                    var dashboards = await _dashboardService.GetDashboardsByNationalityAsync(nationality);
-                    return Ok(dashboards);
-                }
-
-                else
-                    return BadRequest(new { message = "provide at least one query parameter: userId, email, mobileNumber, search, gender, nationality" });
-
-                return Ok(dashboard);
-        }
-
-
         [HttpGet("userprofiles")]
         public async Task<IActionResult> GetOrCreateUserProfile()
         {
             var userProfile = await _userService.GetOrCreateUserProfileAsync();
             return Ok(userProfile);
         }
-
 
         [HttpPut("userprofiles/complete")]
         public async Task<IActionResult> CompleteUserProfile([FromBody] CompleteProfileDto dto)
@@ -86,14 +50,12 @@ namespace Presentation.Controllers
         //        return Ok(profile);
         //}
 
-
         [HttpPatch("users/{userId}")]
         public async Task<IActionResult> PatchUser(string userId, [FromBody] PatchUserProfileDto PatchUser)
         {
             var result = await _userService.PatchUserAsync(userId, PatchUser);
             return Ok(result);
         }
-
 
         [HttpDelete("users/{userId}")]
         public async Task<IActionResult> DeleteUser(string userId)
@@ -110,14 +72,12 @@ namespace Presentation.Controllers
             return Ok(loans);
         }
 
-
         [HttpPost("loans")]
         public async Task<IActionResult> CreateLoan([FromQuery] LoanType loantype, [FromBody] CreateLoanDto createLoan)
         {
             var loan = await _loanService.CreateLoanAsync(loantype, createLoan);
             return CreatedAtAction(nameof(CreateLoan), new { id = loan?.Id }, loan);
         }
-
 
         [HttpGet("loans")]
         public async Task<IActionResult> GetLoans(
@@ -134,7 +94,8 @@ namespace Presentation.Controllers
 
         //PAYMENTS
 
-        [HttpPost("repayment")]
+        [HttpPost("loanpayment")]
+        [AllowAnonymous]
         public async Task<IActionResult> InitiatePayment([FromBody] InitiatePaymentDto initiatePayment)
         {
             var result = await _paymentService.InitiatePaymentAsync(initiatePayment);
@@ -147,17 +108,12 @@ namespace Presentation.Controllers
         }
 
         [HttpGet("payments")]
+        [AllowAnonymous]
         public async Task<IActionResult> GetPayments([FromQuery] PaymentStatus? status = null, [FromQuery] string? paymentId = null, [FromQuery] string? reference = null)
         {
             var result = await _paymentService.GetPaymentsAsync(status, paymentId, reference);
             return Ok(result);
         }
 
-        //[HttpGet("reference")]
-        //public async Task<IActionResult> GetPaymentByReference(string reference)
-        //{
-        //    var result = await _paymentService.GetPaymentByReferenceAsync(reference);
-        //    return Ok(result);
-        //}
     }
 }

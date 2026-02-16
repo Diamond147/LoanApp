@@ -41,7 +41,6 @@
             }
             catch (Exception ex)
             {
-                // 🔥 Unknown / Bug
                 _logger.LogError(ex, "Unhandled exception");
 
                 await WriteResponse(

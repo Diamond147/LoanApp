@@ -23,7 +23,6 @@ namespace Infrastructure.Repositories.Interfaces
         Task<List<Loan>> GetPaidLoansAsync(string userId);
         Task<Loan?> GetLoanByIdAsync(string loanId);
         Task<Loan?> UpdateLoanStatusAsync(string loanId, LoanStatus newStatus);
-        //Task<bool> UpdateLoanStatusAsync(string loanId, LoanStatus newStatus);
         Task<bool> DeleteLoanAsync(string loanId);
 
 

@@ -3,7 +3,7 @@
     public enum PaymentStatus
     {
         Pending,
-        Success,    //Paystack confirms via webhook
+        Success,
         Failed
     }
 }

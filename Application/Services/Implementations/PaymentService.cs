@@ -90,11 +90,9 @@ namespace Application.Services.Implementations
                 //Extract important fields from the Paystack response (JSON object with nested data structure)
                 var responseData = paystackResponse.GetProperty("data");
                 var authorizationUrl = responseData.GetProperty("authorization_url").GetString();
-                //var accessCode = responseData.GetProperty("access_code").GetString();
 
                 // Update payment record with Paystack response details
                 payment.AuthorizationUrl = authorizationUrl;
-                //payment.AccessCode = accessCode;
                 payment.PaystackResponse = paystackResponse.ToString();
                 payment.UpdatedDate = DateTime.UtcNow;
 
@@ -104,7 +102,6 @@ namespace Application.Services.Implementations
                 {
                     AuthorizationUrl = authorizationUrl ?? string.Empty,
                     Reference = paymentReference,
-                    //AccessCode = accessCode ?? string.Empty,
                     Amount = amountToPay,
                     LoanId = loan.Id
                 };
@@ -133,9 +130,6 @@ namespace Application.Services.Implementations
         // This method is called by the webhook when Paystack confirms a payment.It handles the entire post-payment workflow.
         public async Task<bool> VerifyPaymentAsync(string reference)
         {
-            Console.WriteLine($"--- Starting Verification for {reference} ---");
-
-            // use the reference sent by paystack in the webhook to find the payment record in db
             var payment = await _paymentRepository.GetPaymentByReferenceAsync(reference);
             if (payment == null)
             {
@@ -204,8 +198,6 @@ namespace Application.Services.Implementations
                                 await _loanRepository.AddLoanHistoryAsync(loanHistory);
                                 Console.WriteLine("DEBUG: History recorded.");
                             }
-
-                            //await _loanRepository.UpdateLoanAsync(loan);
 
                             // Send notification email to user
                             if (payment.UserProfileId != null)
