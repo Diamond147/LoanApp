@@ -1,5 +1,5 @@
 ﻿using Infrastructure.DbContexts;
-using Infrastructure.Repositories.Interfaces;
+using Application.Services.Interfaces.Repositories;
 using Domain.Entities;
 
 namespace Infrastructure.Repositories.Implementations

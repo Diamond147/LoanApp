@@ -1,6 +1,6 @@
-﻿using Domain.Entities;
+using Domain.Entities;
 
-namespace Infrastructure.Repositories.Interfaces
+namespace Application.Services.Interfaces.Repositories
 {
     public interface IUserRepository
     {

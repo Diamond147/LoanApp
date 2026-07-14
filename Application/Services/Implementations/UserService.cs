@@ -1,13 +1,16 @@
 ﻿using Application.Exceptions;
 using Application.Extensions;
-using Application.Services.Interfaces;
+using Application.Services.Interfaces.ExternalServices;
+using Application.Services.Interfaces.Repositories;
+using Application.Services.Interfaces.Services;
+using Azure.Core;
+using BCrypt.Net;
 using Domain.DTOs.Users.RequestDto;
 using Domain.DTOs.Users.ResponseDto;
 using Domain.Entities;
-using Infrastructure.Repositories.Interfaces;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Azure.Cosmos;
-using System.Net;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 
 namespace Application.Services.Implementations
 {
@@ -15,51 +18,53 @@ namespace Application.Services.Implementations
     {
         private readonly IUserRepository _userRepository;
         private readonly IHttpContextAccessor _httpContextAccessor;
-        public UserService(IUserRepository userRepository, IHttpContextAccessor httpContextAccessor)
+        private readonly ITokenService _tokenService;
+        public UserService(IUserRepository userRepository, IHttpContextAccessor httpContextAccessor, ITokenService tokenService)
         {
             _userRepository = userRepository;
             _httpContextAccessor = httpContextAccessor;
+            _tokenService = tokenService;
+        }
+
+        private string HashPassword(string password)
+        {
+            // Generates a cryptographically secure, unique salt automatically and hashes it
+            return BCrypt.Net.BCrypt.HashPassword(password);
+        }
+
+        private bool VerifyPassword(string Password, string PasswordHash)
+        {
+            // Extracts the salt from the stored hash and validates the comparison mathematically
+            if (string.IsNullOrEmpty(PasswordHash)) return false;
+
+            return BCrypt.Net.BCrypt.Verify(Password, PasswordHash);
         }
 
 
-        public async Task<UserProfileDto> GetOrCreateUserProfileAsync()
+        public async Task<UserProfileDto> CreateUserProfileAsync(CreateUserProfileDto createUserProfileDto)
         {
             try
             {
-                var userInfo = _httpContextAccessor.HttpContext?.User?.GetUserInfo(); // Get all user info at once
-                if (userInfo == null)
-                    throw new UnauthorizedAccessException("User is not authenticated");
-
-                // Check if profile exists
-                var existingProfile = await _userRepository.GetUserByIdAsync(userInfo.UserId);
-                if (existingProfile != null)
+                // Validate if user email already exists
+                var existingUser = await _userRepository.GetUserByEmailAsync(createUserProfileDto.Email);
+                if (existingUser != null)
                 {
-                    return new UserProfileDto
-                    {
-                        Id = existingProfile.Id,
-                        FirstName = existingProfile.FirstName,
-                        LastName = existingProfile.LastName,
-                        Email = existingProfile.Email,
-                        Gender = existingProfile.Gender,
-                        DateOfBirth = existingProfile.DateOfBirth,
-                        MobileNumber = existingProfile.MobileNumber,
-                        Nationality = existingProfile.Nationality,
-                        SignUpDate = existingProfile.SignUpDate
-                    };
+                    throw new InvalidOperationException("A user with this email already exists.");
                 }
 
                 // Create new profile
                 var userProfile = new UserProfile
                 {
-                    Id = userInfo.UserId,
-                    FirstName = userInfo.FirstName,
-                    LastName = userInfo.LastName,
-                    Email = userInfo.Email,
-                    SignUpDate = DateTime.UtcNow,
-                    Gender = null,
-                    DateOfBirth = null,
-                    MobileNumber = null,
-                    Nationality = null
+                    Id = Guid.NewGuid().ToString(),
+                    FirstName = createUserProfileDto.FirstName,
+                    LastName = createUserProfileDto.LastName,
+                    Email = createUserProfileDto.Email,
+                    PasswordHash = HashPassword(createUserProfileDto.Password),
+                    Gender = createUserProfileDto.Gender,
+                    DateOfBirth = createUserProfileDto.DateOfBirth,
+                    MobileNumber = createUserProfileDto.MobileNumber,
+                    Nationality = createUserProfileDto.Nationality,
+                    SignUpDate = DateTime.UtcNow
                 };
 
                 await _userRepository.AddUserAsync(userProfile);
@@ -73,22 +78,36 @@ namespace Application.Services.Implementations
                     DateOfBirth = userProfile.DateOfBirth,
                     MobileNumber = userProfile.MobileNumber,
                     Nationality = userProfile.Nationality,
-                    SignUpDate = userProfile.SignUpDate,
+                    SignUpDate = DateTime.UtcNow
                 };
             }
             catch (UnauthorizedAccessException)
             {
                 throw;
             }
-            catch (CosmosException ex) when (
-               ex.StatusCode == HttpStatusCode.ServiceUnavailable ||
-               ex.StatusCode == HttpStatusCode.RequestTimeout)
+            catch (Exception ex)
             {
-                throw new ExternalServiceUnavailableException(
-                    "Service is temporarily unavailable. Please try again later.",
-                    ex
-                );
+                throw new ExternalServiceUnavailableException("Service is temporarily unavailable. Please try again later.", ex);
             }
+        }
+
+
+        public async Task<LoginResponseDto> LoginAsync(LoginRequestDto request)
+        {
+            var user = await _userRepository.GetUserByEmailAsync(request.Email);
+            if (user == null || !VerifyPassword(request.Password, user.PasswordHash))
+                throw new UnauthorizedAccessException("Invalid credentials");
+
+            // Use the token service to mint the JWT string
+            var roles = new[] { "User" };
+            var token = _tokenService.GenerateAccessToken(user.Id, user.Email, roles);
+
+            return new LoginResponseDto {
+                AccessToken = token,
+                Email = user.Email,
+                FirstName = user.FirstName,
+                LastName = user.LastName
+            };
         }
 
 
@@ -97,8 +116,8 @@ namespace Application.Services.Implementations
         {
             try
             {
-                var userInfo = _httpContextAccessor.HttpContext?.User?.GetUserInfo();
-                if (userInfo == null)
+                var userId = _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
                     throw new UnauthorizedAccessException("User is not authenticated");
 
                 // Strip all non-digits just in case
@@ -108,7 +127,7 @@ namespace Application.Services.Implementations
                     throw new ValidationException("Mobile number cannot exceed 11 digits.");
                 }
 
-                var existingUser = await _userRepository.GetUserByIdAsync(userInfo.UserId);
+                var existingUser = await _userRepository.GetUserByIdAsync(userId);
                 if (existingUser == null)
                 {
                     throw new NotFoundException("User profile not found. Please sign in first.");
@@ -143,9 +162,7 @@ namespace Application.Services.Implementations
             {
                 throw;
             }
-            catch (CosmosException ex) when (
-               ex.StatusCode == HttpStatusCode.ServiceUnavailable ||
-               ex.StatusCode == HttpStatusCode.RequestTimeout)
+            catch (Exception ex)
             {
                 throw new ExternalServiceUnavailableException("Service is temporarily unavailable. Please try again later.", ex);
             }
@@ -177,9 +194,7 @@ namespace Application.Services.Implementations
             {
                 throw;
             }
-            catch (CosmosException ex) when (
-               ex.StatusCode == HttpStatusCode.ServiceUnavailable ||
-               ex.StatusCode == HttpStatusCode.RequestTimeout)
+            catch (Exception ex)
             {
                 throw new ExternalServiceUnavailableException(
                     "Service is temporarily unavailable. Please try again later.",
@@ -194,11 +209,11 @@ namespace Application.Services.Implementations
         {
             try
             {
-                var userInfo = _httpContextAccessor.HttpContext?.User?.GetUserInfo();
-                if (userInfo == null)
+                var userId = _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
                     throw new UnauthorizedAccessException("User is not authenticated");
 
-                var existingUser = await _userRepository.GetUserByIdAsync(userInfo.UserId);
+                var existingUser = await _userRepository.GetUserByIdAsync(userId);
                 if (existingUser == null)
                 {
                     throw new NotFoundException("User profile not found");
@@ -240,9 +255,7 @@ namespace Application.Services.Implementations
             {
                 throw;
             }
-            catch(CosmosException ex) when(
-               ex.StatusCode == HttpStatusCode.ServiceUnavailable ||
-               ex.StatusCode == HttpStatusCode.RequestTimeout)
+            catch (Exception ex)
             {
                 throw new ExternalServiceUnavailableException(
                     "Service is temporarily unavailable. Please try again later.",
@@ -284,9 +297,7 @@ namespace Application.Services.Implementations
             {
                 throw;
             }
-            catch (CosmosException ex) when (
-               ex.StatusCode == HttpStatusCode.ServiceUnavailable ||
-               ex.StatusCode == HttpStatusCode.RequestTimeout)
+            catch (Exception ex)
             {
                 throw new ExternalServiceUnavailableException(
                     "Service is temporarily unavailable. Please try again later.",
@@ -309,9 +320,7 @@ namespace Application.Services.Implementations
             {
                 throw;
             }
-            catch (CosmosException ex) when (
-               ex.StatusCode == HttpStatusCode.ServiceUnavailable ||
-               ex.StatusCode == HttpStatusCode.RequestTimeout)
+            catch (Exception ex)
             {
                 throw new ExternalServiceUnavailableException(
                     "Service is temporarily unavailable. Please try again later.",

@@ -1,4 +1,4 @@
-﻿using Infrastructure.ExternalServices.Interfaces;
+﻿using Application.Services.Interfaces.ExternalServices;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;

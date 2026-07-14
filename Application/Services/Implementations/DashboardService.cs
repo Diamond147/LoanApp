@@ -1,8 +1,8 @@
-﻿using Application.Services.Interfaces;
+﻿using Application.Services.Interfaces.Services;
 using Domain.Entities;
 using Application.Exceptions;
 using Domain.DTOs.Users.ResponseDto;
-using Infrastructure.Repositories.Interfaces;
+using Application.Services.Interfaces.Repositories;
 
 namespace Application.Services.Implementations
 {

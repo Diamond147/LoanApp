@@ -1,17 +1,17 @@
-﻿using Domain.DTOs.Admin;
+using Domain.DTOs.Admin;
 using Domain.DTOs.Users.RequestDto;
 using Domain.DTOs.Users.ResponseDto;
 using Domain.Entities;
 using Domain.Enums;
 
-namespace Application.Services.Interfaces
+namespace Application.Services.Interfaces.Services
 {
     public interface IAdminService
     {
         // Dashboard
         Task<AdminDashboardStats> GetDashboardStatsAsync();
-        Task<ContinuationResponse<AdminUserDetailDto>> GetAllUsersDetailsAsync(int pageSize, string? continuationToken, string? userId);
-        
+        Task<ContinuationResponse<AdminUserDetailDto>> GetAllUsersDetailsAsync(int pageSize, string? continuationToken, string? userId, string? email, string? mobileNumber, string? gender, string? nationality, string? searchTerm);
+
 
         // User Management
         Task<ContinuationResponse<AdminUserDto>> GetUsersWithContinuationAsync(int pageSize, string? continuationToken, string? userId);

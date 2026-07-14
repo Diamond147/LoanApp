@@ -1,8 +1,7 @@
-﻿
 using Domain.DTOs.Emails;
 using Domain.Entities;
 
-namespace Application.Services.Interfaces
+namespace Application.Services.Interfaces.Services
 {
     public interface IEmailService
     {

@@ -1,5 +1,4 @@
-﻿using Application.Services.Interfaces;
-using Domain.DTOs.Payments;
+﻿using Application.Services.Interfaces.Services;
 using Domain.DTOs.Users.RequestDto;
 using Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
@@ -7,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Presentation.Controllers
 {
-    [Authorize]
+    //[Authorize]
     [ApiController]
     [Route("api")]
     public class LoanController : ControllerBase
@@ -28,19 +27,33 @@ namespace Presentation.Controllers
             _emailService=emailService;
         }
 
-        [HttpGet("userprofiles")]
-        public async Task<IActionResult> GetOrCreateUserProfile()
+        [HttpPost("register")]
+        public async Task<IActionResult> CreateUserProfile([FromBody] CreateUserProfileDto dto)
         {
-            var userProfile = await _userService.GetOrCreateUserProfileAsync();
-            return Ok(userProfile);
+            var userProfile = await _userService.CreateUserProfileAsync(dto);
+            return CreatedAtAction(nameof(CreateUserProfile), new { id = userProfile?.Id }, userProfile);
         }
 
-        [HttpPut("userprofiles/complete")]
-        public async Task<IActionResult> CompleteUserProfile([FromBody] CompleteProfileDto dto)
+        [HttpPost("login")]
+        public async Task<IActionResult> Login([FromBody] LoginRequestDto request)
         {
-            var profile = await _userService.CompleteUserProfileAsync(dto);
-            return Ok(profile);
+            var result = await _userService.LoginAsync(request);
+            return Ok(result);
         }
+
+        [HttpGet("users/{userId}")]
+        public async Task<IActionResult> GetUser(string userId)
+        {
+            var result = await _userService.GetUserByIdAsync(userId);
+            return Ok(result);
+        }
+
+        //[HttpPut("userprofiles/complete")]
+        //public async Task<IActionResult> CompleteUserProfile([FromBody] CompleteProfileDto dto)
+        //{
+        //    var profile = await _userService.CompleteUserProfileAsync(dto);
+        //    return Ok(profile);
+        //}
 
 
         //[HttpPut("users/update")]
@@ -72,10 +85,11 @@ namespace Presentation.Controllers
             return Ok(loans);
         }
 
+
         [HttpPost("loans")]
-        public async Task<IActionResult> CreateLoan([FromQuery] LoanType loantype, [FromBody] CreateLoanDto createLoan)
+        public async Task<IActionResult> CreateLoan([FromBody] CreateLoanDto createLoan)
         {
-            var loan = await _loanService.CreateLoanAsync(loantype, createLoan);
+            var loan = await _loanService.CreateLoanAsync(createLoan);
             return CreatedAtAction(nameof(CreateLoan), new { id = loan?.Id }, loan);
         }
 
@@ -96,9 +110,9 @@ namespace Presentation.Controllers
 
         [HttpPost("loanpayment")]
         [AllowAnonymous]
-        public async Task<IActionResult> InitiatePayment([FromBody] InitiatePaymentDto initiatePayment)
+        public async Task<IActionResult> InitiatePayment()
         {
-            var result = await _paymentService.InitiatePaymentAsync(initiatePayment);
+            var result = await _paymentService.InitiatePaymentAsync();
             return Ok(new
             {
                 success = true,

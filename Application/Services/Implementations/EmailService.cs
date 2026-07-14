@@ -1,8 +1,8 @@
 ﻿
-using Infrastructure.Repositories.Interfaces;
-using Application.Services.Interfaces;
+using Application.Services.Interfaces.Repositories;
+using Application.Services.Interfaces.Services;
 using Domain.Entities;
-using Infrastructure.ExternalServices.Interfaces;
+using Application.Services.Interfaces.ExternalServices;
 using Domain.DTOs.Emails;
 
 namespace Application.Services.Implementations

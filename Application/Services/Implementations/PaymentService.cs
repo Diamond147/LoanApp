@@ -1,14 +1,12 @@
 ﻿using Application.Exceptions;
 using Application.Extensions;
-using Application.Services.Interfaces;
+using Application.Services.Interfaces.Services;
 using Domain.DTOs.Payments;
 using Domain.Entities;
 using Domain.Enums;
-using Infrastructure.ExternalServices.Interfaces;
-using Infrastructure.Repositories.Interfaces;
+using Application.Services.Interfaces.ExternalServices;
+using Application.Services.Interfaces.Repositories;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Azure.Cosmos;
-using Microsoft.EntityFrameworkCore;
 using System.Net;
 using System.Text.Json;
 
@@ -33,7 +31,8 @@ namespace Application.Services.Implementations
             _httpContextAccessor = httpContextAccessor;
         }
 
-        public async Task<PaymentResponseDto> InitiatePaymentAsync(InitiatePaymentDto initiatePayment)
+        //public async Task<PaymentResponseDto> InitiatePaymentAsync(InitiatePaymentDto initiatePayment)
+        public async Task<PaymentResponseDto> InitiatePaymentAsync()
         {
             try
             {
@@ -41,24 +40,24 @@ namespace Application.Services.Implementations
                 if (UserInfo == null)
                     throw new UnauthorizedAccessException("User is not authenticated");
 
-                // Validate loan exists and belongs to this user
-                var loan = await _loanRepository.GetLoanByIdAsync(initiatePayment.LoanId);
-                if (loan == null || loan.UserProfileId != UserInfo.UserId)
+                // Get user's approved loan
+                var loan = await _loanRepository.GetApprovedLoanByUserIdAsync(UserInfo.UserId);
+                if (loan == null)
                 {
-                    throw new Exception("Loan not found or you do not have permission to pay for this loan.");
+                    throw new NotFoundException("No approved loan found.");
                 }
 
-                // only approved loans can be paid
-                if (loan.Status != LoanStatus.Approved)
-                {
-                    throw new ValidationException("Only approved loans can be paid.");
-                }
-
-                // check if loan already has a successful payment
-                var existingSuccessfulLoan = await _paymentRepository.GetPaymentByIdAsync(initiatePayment.LoanId);
-                if (existingSuccessfulLoan != null && existingSuccessfulLoan.Status == PaymentStatus.Success)
+                // check if loan already paid
+                var existingPayments = await _paymentRepository.GetPaymentsByLoanIdAsync(loan.Id);
+                if (existingPayments.Any(p => p.Status == PaymentStatus.Success))
                 {
                     throw new ValidationException("This loan has already been paid.");
+                }
+
+                var user = await _userRepository.GetUserByIdAsync(UserInfo.UserId);
+                if (user == null)
+                {
+                    throw new NotFoundException("User not found.");
                 }
 
                 // This reference is used to Track payment in our database,Verify payment with Paystack,Match webhook notifications to payments
@@ -82,7 +81,7 @@ namespace Application.Services.Implementations
 
                 // Initialize transaction with Paystack and this creates a checkout session on Paystack's servers
                 var paystackResponse = await _paystackClient.InitializeTransactionAsync(
-                    email: initiatePayment.Email,
+                    email: user.Email,
                     amount: amountToPay,
                     reference: paymentReference
                 );
@@ -118,9 +117,7 @@ namespace Application.Services.Implementations
             {
                 throw;
             }
-            catch (CosmosException ex) when (
-               ex.StatusCode == HttpStatusCode.ServiceUnavailable ||
-               ex.StatusCode == HttpStatusCode.RequestTimeout)
+            catch (Exception ex)
             {
                 throw new ExternalServiceUnavailableException("Service is temporarily unavailable. Please try again later.", ex);
             }

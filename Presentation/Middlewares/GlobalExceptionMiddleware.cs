@@ -43,10 +43,14 @@
             {
                 _logger.LogError(ex, "Unhandled exception");
 
+                // TEMPORARY: Log full error details in development
+                var isDevelopment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development";
+                var errorMessage = isDevelopment ? ex.ToString() : "An unexpected error occurred. Please try again later.";
+
                 await WriteResponse(
                     context,
                     HttpStatusCode.InternalServerError,
-                    "An unexpected error occurred. Please try again later."
+                    errorMessage
                 );
             }
         }

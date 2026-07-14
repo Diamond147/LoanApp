@@ -1,38 +1,50 @@
 using Application.Services.Implementations;
-using Application.Services.Interfaces;
+using Application.Services.Interfaces.Services;
+using Application.Services.Interfaces.Repositories;
+using Application.Services.Interfaces.ExternalServices;
 using Infrastructure.DbContexts;
 using Infrastructure.ExternalServices;
 using Infrastructure.ExternalServices.Implementations;
-using Infrastructure.ExternalServices.Interfaces;
 using Infrastructure.Repositories.Implementations;
-using Infrastructure.Repositories.Interfaces;
 using Infrastructure.Repositories.Repositories;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Identity.Web;
 using Microsoft.OpenApi.Models;
+using Npgsql.EntityFrameworkCore.PostgreSQL;
 using Presentation.Filters;
 using Presentation.Middlewares;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Security.Cryptography;
+using DotNetEnv;
+
+
+// Load the .env file into the system environment(requires DotNetEnv package)
+Env.Load();
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-var cosmosConfig = builder.Configuration.GetSection("CosmosDb"); //Using GetSection
 
-//Add DbContext
+//// Industry Standard: Pull the fully built string straight from Configuration
+//var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+
+var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING")
+    ?? builder.Configuration.GetConnectionString("DefaultConnection");
+
+// Register DbContext for PostgreSQL
 builder.Services.AddDbContext<AppDbContext>(options =>
-{
-    options.UseCosmos(
-        accountEndpoint: cosmosConfig["AccountEndpoint"] ?? throw new InvalidOperationException("AccountEndpoint is missing"),
-        accountKey: cosmosConfig["AccountKey"] ?? throw new InvalidOperationException("AccountKey is missing"),
-        databaseName: cosmosConfig["DatabaseName"] ?? throw new InvalidOperationException("DatabaseName is missing")
-    );
-});
+    options.UseNpgsql(connectionString, b =>
+        b.MigrationsAssembly("Infrastructure")));
+//builder.Services.AddDbContext<AppDbContext>(options =>
+//{
+//    options.UseNpgsql(connectionString);
+//});
+
 
 builder.Services.AddHttpContextAccessor();
 
-//// Register repositories
+// Register repositories
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<ILoanRepository, LoanRepository>();
 builder.Services.AddScoped<IAdminRepository, AdminRepository>();
@@ -46,6 +58,9 @@ builder.Services.AddScoped<ILoanService, LoanService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<IPaystackWebhook, PaystackWebhook>();
+builder.Services.AddScoped<ITokenService, TokenService>();
+
 
 // EXTERNAL SERVICES (Paystack)
 builder.Services.AddHttpClient<IPaystackClient, PaystackClient>((serviceProvider, client) =>
@@ -59,36 +74,21 @@ builder.Services.AddHttpClient<IPaystackClient, PaystackClient>((serviceProvider
     client.Timeout = TimeSpan.FromSeconds(30); // 30 second timeout
 });
 
-// Register PaystackClient with secret key from configuration
+// Register PaystackClient with secret key from environment variables
 builder.Services.AddScoped<IPaystackClient>(provider =>
 {
     var httpClient = provider.GetRequiredService<HttpClient>();
-    var secretKey = builder.Configuration["Paystack:SecretKey"]!;
+    // Read Paystack secret key from environment variable (for security)
+    var secretKey = Environment.GetEnvironmentVariable("PAYSTACK_SECRET_KEY") ?? "dummy_secret_key";
+        //?? throw new InvalidOperationException("PAYSTACK_SECRET_KEY environment variable is missing");
 
     return new PaystackClient(httpClient, secretKey);
 });
 
 
-//// Register email client with Gmail SMTP configuration.
-//builder.Services.AddSingleton<IEmailClient>(provider =>
-//{
-//    var smtpServer = builder.Configuration["Email:SmtpServer"]!;
-//    var smtpPort = int.Parse(builder.Configuration["Email:SmtpPort"]!);
-//    var senderEmail = builder.Configuration["Email:SenderEmail"]!;
-//    var senderPassword = builder.Configuration["Email:SenderPassword"]!;
-//    var senderName = builder.Configuration["Email:SenderName"]!;
-
-//    return new EmailClient(smtpServer, smtpPort, senderEmail, senderPassword, senderName);
-//});
-
-// ADD Azure Email
-builder.Services.AddSingleton<IEmailClient>(provider =>
-{
-    var connectionString = builder.Configuration["AzureCommunicationService:ConnectionString"]!;
-    var senderEmail = builder.Configuration["AzureCommunicationService:sender"]!;
-
-    return new AzureEmailClient(connectionString, senderEmail);
-});
+// Register a no-op email client for development so DI can resolve IEmailClient.
+// Replace with real email client registration for production (SendGrid, SMTP, or AzureCommunicationService).
+builder.Services.AddSingleton<IEmailClient, NoOpEmailClient>();
 
 
 // Configure Cross-Origin Resource Sharing (CORS).
@@ -120,7 +120,7 @@ builder.Services.AddControllers()
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 
-//Swagger OAuth2 configuration
+//Swagger OAuth2 configuration (currently disabled - add your auth provider config here)
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo
@@ -136,69 +136,54 @@ builder.Services.AddSwaggerGen(c =>
      //Display enums as strings in Swagger UI
     c.UseInlineDefinitionsForEnums();
 
-    var azureAd = builder.Configuration.GetSection("AzureAd");
-    var scope = azureAd["Scope"];
-    if (string.IsNullOrWhiteSpace(scope))
-    {
-        throw new InvalidOperationException("AzureAd:Scope configuration is missing or empty.");
-    }
-
-    c.AddSecurityDefinition("oauth2", new OpenApiSecurityScheme
-    {
-        Type = SecuritySchemeType.OAuth2,
-        Flows = new OpenApiOAuthFlows
-        {
-            AuthorizationCode = new OpenApiOAuthFlow
-            {
-                AuthorizationUrl = new Uri($"{azureAd["Instance"]}{azureAd["TenantId"]}/oauth2/v2.0/authorize"),
-                TokenUrl = new Uri($"{azureAd["Instance"]}{azureAd["TenantId"]}/oauth2/v2.0/token"),
-                Scopes = new Dictionary<string, string>
-                {
-                    { scope, "Access the API" }
-                }
-            }
-        }
-    });
-
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement
-    {
-        {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "oauth2"
-                }
-            },
-            new[] { azureAd["Scope"]! }
-        }
-    });
+    // TODO: Add OAuth2 security definition when you have an auth provider configured
+    // c.AddSecurityDefinition("oauth2", ...);
+    // c.AddSecurityRequirement(...);
 });
 
 
-//configure the Authentication
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
-
-builder.Services.Configure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
+// Configure authentication with an auth provider (Azure AD, custom RSA asymmetric, Auth0, etc.)
+builder.Services.AddAuthentication(options =>
 {
-    options.TokenValidationParameters.RoleClaimType = "roles";
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    // 1. Fetch and decode the Base64 Public Key from configuration
+    var publicKeyBase64 = builder.Configuration["Jwt:RsaPublicKey"]?.Trim()
+        ?? throw new InvalidOperationException("RSA Public Key is missing");
+
+    var rsa = RSA.Create();
+ 
+    rsa.ImportRSAPublicKey(Convert.FromBase64String(publicKeyBase64), out _);
+
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = builder.Configuration["Jwt:Issuer"],
+        ValidAudience = builder.Configuration["Jwt:Audience"],
+
+        // 2. Use the Asymmetric RsaSecurityKey
+        IssuerSigningKey = new RsaSecurityKey(rsa),
+
+        // 3. Strictly enforce RS256 algorithm
+        ValidAlgorithms = new[] { SecurityAlgorithms.RsaSha256 }
+    };
 });
-//builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-//    .AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
 
 
+builder.Services.AddAuthorization();
 // Add Authorization with policy
-builder.Services.AddAuthorization(options =>
-{
-    options.AddPolicy("AdminPolicy", policy =>
-    policy.RequireAssertion(ctx =>
-        ctx.User.Identity?.Name == "Oadesola@infinion.co"));
-});
 //builder.Services.AddAuthorization(options =>
 //{
-//    options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
+//{
+//    options.AddPolicy("AdminPolicy", policy =>
+//    policy.RequireAssertion(ctx =>
+//        ctx.User.Identity?.Name == "admin@example.com"));
 //});
 
 var app = builder.Build();
@@ -215,7 +200,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(c =>
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "Loan API V1");
-        c.OAuthClientId(builder.Configuration["SwaggerAzureAd:ClientId"]);  
+        //c.OAuthClientId(builder.Configuration["SwaggerAzureAd:ClientId"]);  
         c.OAuthUsePkce();
     });
 }

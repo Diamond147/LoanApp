@@ -1,6 +1,6 @@
-﻿using Domain.DTOs.Users.ResponseDto;
+using Domain.DTOs.Users.ResponseDto;
 
-namespace Application.Services.Interfaces
+namespace Application.Services.Interfaces.Services
 {
     public interface IDashboardService
     {

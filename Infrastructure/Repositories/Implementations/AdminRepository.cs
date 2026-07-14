@@ -1,7 +1,7 @@
 ﻿using Domain.Entities;
 using Domain.Enums;
 using Infrastructure.DbContexts;
-using Infrastructure.Repositories.Interfaces;
+using Application.Services.Interfaces.Repositories;
 using Infrastructure.Services.Utilities.Helpers;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,16 +20,40 @@ namespace Infrastructure.Repositories.Repositories
         public async Task<(List<UserProfile> Users, string? ContinuationToken)> GetAllUsersDetailsAsync(
             int pageSize = 10,
             string? continuationToken = null,
-            string? userId = null)
+            string? userId = null,
+            string? email = null,
+            string? mobileNumber = null,
+            string? gender = null,
+            string? nationality = null,
+            string? searchTerm = null)
         {
             // Get users 
             var usersQuery = _context.UserProfiles.AsQueryable();
 
-            // Filter by userId if provided
+            // Filtering if provided
             if (!string.IsNullOrEmpty(userId))
-            {
                 usersQuery = usersQuery.Where(u => u.Id == userId);
-            }
+
+            if (!string.IsNullOrEmpty(email))
+                usersQuery = usersQuery.Where(u => u.Email == email);
+
+            if (!string.IsNullOrEmpty(mobileNumber))
+                usersQuery = usersQuery.Where(u => u.MobileNumber == mobileNumber);
+
+            if (!string.IsNullOrEmpty(gender))
+                usersQuery = usersQuery.Where(u => u.Gender == gender);
+
+            if (!string.IsNullOrEmpty(nationality))
+                usersQuery = usersQuery.Where(u => u.Nationality == nationality);
+
+            if (!string.IsNullOrEmpty(searchTerm))
+                usersQuery = usersQuery.Where(u =>
+                    u.FirstName.Contains(searchTerm) ||
+                    u.LastName.Contains(searchTerm) ||
+                    u.Email.Contains(searchTerm) ||
+                    u.MobileNumber != null && u.MobileNumber.Contains(searchTerm) ||
+                    u.Gender != null && u.Gender.Contains(searchTerm) ||
+                    u.Nationality != null && u.Nationality.Contains(searchTerm));
 
             // Order by SignUpDate (most recent first)
             usersQuery = usersQuery.OrderByDescending(u => u.SignUpDate);

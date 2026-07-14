@@ -1,12 +1,11 @@
 ﻿using Application.Exceptions;
-using Application.Services.Interfaces;
+using Application.Services.Interfaces.Services;
 using Domain.DTOs.Admin;
 using Domain.DTOs.Users.RequestDto;
 using Domain.DTOs.Users.ResponseDto;
 using Domain.Entities;
 using Domain.Enums;
-using Infrastructure.Repositories.Interfaces;
-using Microsoft.Azure.Cosmos;
+using Application.Services.Interfaces.Repositories;
 using System.Net;
 
 namespace Application.Services.Implementations
@@ -37,9 +36,7 @@ namespace Application.Services.Implementations
                     throw new NotFoundException("Dashboard details not found.");
                 return result;
             }
-            catch (CosmosException ex) when (
-               ex.StatusCode == HttpStatusCode.ServiceUnavailable ||
-               ex.StatusCode == HttpStatusCode.RequestTimeout)
+            catch (Exception ex) when (ex is NotFoundException) 
             {
                 throw new ExternalServiceUnavailableException(
                     "Service is temporarily unavailable. Please try again later.",
@@ -48,7 +45,8 @@ namespace Application.Services.Implementations
             }
         }
 
-        public async Task<ContinuationResponse<AdminUserDetailDto>> GetAllUsersDetailsAsync(int pageSize, string? continuationToken, string? userId)
+        public async Task<ContinuationResponse<AdminUserDetailDto>> GetAllUsersDetailsAsync(
+            int pageSize, string? continuationToken, string? userId, string? email, string? mobileNumber, string? gender, string? nationality, string? searchTerm)
         {
             try
             {
@@ -58,7 +56,7 @@ namespace Application.Services.Implementations
                 }
 
                 // Get users with their loans
-                var (users, nextToken) = await _adminRepository.GetAllUsersDetailsAsync(pageSize, continuationToken, userId);
+                var (users, nextToken) = await _adminRepository.GetAllUsersDetailsAsync(pageSize, continuationToken, userId, email, mobileNumber, gender, nationality, searchTerm);
                 if (!users.Any())
                 {
                     return new ContinuationResponse<AdminUserDetailDto>
@@ -131,9 +129,7 @@ namespace Application.Services.Implementations
                     HasMore = nextToken != null,
                 };
             }
-            catch (CosmosException ex) when (
-               ex.StatusCode == HttpStatusCode.ServiceUnavailable ||
-               ex.StatusCode == HttpStatusCode.RequestTimeout)
+            catch (Exception ex)
             {
                 throw new ExternalServiceUnavailableException(
                     "Service is temporarily unavailable. Please try again later.",
@@ -180,9 +176,7 @@ namespace Application.Services.Implementations
                     HasMore = !string.IsNullOrEmpty(newContinuationToken)
                 };
             }
-            catch (CosmosException ex) when (
-               ex.StatusCode == HttpStatusCode.ServiceUnavailable ||
-               ex.StatusCode == HttpStatusCode.RequestTimeout)
+            catch (Exception ex)
             {
                 throw new ExternalServiceUnavailableException(
                     "Service is temporarily unavailable. Please try again later.",
@@ -212,9 +206,7 @@ namespace Application.Services.Implementations
                     Nationality = user.Nationality
                 };
             }
-            catch (CosmosException ex) when (
-               ex.StatusCode == HttpStatusCode.ServiceUnavailable ||
-               ex.StatusCode == HttpStatusCode.RequestTimeout)
+            catch (Exception ex)
             {
                 throw new ExternalServiceUnavailableException(
                     "Service is temporarily unavailable. Please try again later.",
@@ -234,9 +226,7 @@ namespace Application.Services.Implementations
                 }
                 return deleted;
             }
-            catch (CosmosException ex) when (
-               ex.StatusCode == HttpStatusCode.ServiceUnavailable ||
-               ex.StatusCode == HttpStatusCode.RequestTimeout)
+            catch (Exception ex)
             {
                 throw new ExternalServiceUnavailableException(
                     "Service is temporarily unavailable. Please try again later.",
@@ -282,9 +272,7 @@ namespace Application.Services.Implementations
                     HasMore = !string.IsNullOrEmpty(newContinuationToken)
                 };
             }
-            catch (CosmosException ex) when (
-               ex.StatusCode == HttpStatusCode.ServiceUnavailable ||
-               ex.StatusCode == HttpStatusCode.RequestTimeout)
+            catch (Exception ex)
             {
                 throw new ExternalServiceUnavailableException(
                     "Service is temporarily unavailable. Please try again later.",
@@ -347,9 +335,7 @@ namespace Application.Services.Implementations
                     UserName = user != null ? $"{user.FirstName} {user.LastName}" : null,
                 };
             }
-            catch (CosmosException ex) when (
-               ex.StatusCode == HttpStatusCode.ServiceUnavailable ||
-               ex.StatusCode == HttpStatusCode.RequestTimeout)
+            catch (Exception ex)
             {
                 throw new ExternalServiceUnavailableException(
                     "Service is temporarily unavailable. Please try again later.",
@@ -358,7 +344,7 @@ namespace Application.Services.Implementations
             }
         }
 
-        public async Task<AdminLoanDto?>UpdateLoanStatusAsync(string loanId, LoanStatus newStatus)
+        public async Task<AdminLoanDto?> UpdateLoanStatusAsync(string loanId, LoanStatus newStatus)
         {
             try
             {
@@ -396,9 +382,7 @@ namespace Application.Services.Implementations
                     UserName = user != null ? $"{user.FirstName} {user.LastName}" : null,
                 };
             }
-            catch (CosmosException ex) when (
-               ex.StatusCode == HttpStatusCode.ServiceUnavailable ||
-               ex.StatusCode == HttpStatusCode.RequestTimeout)
+            catch (Exception ex)
             {
                 throw new ExternalServiceUnavailableException(
                     "Service is temporarily unavailable. Please try again later.",
@@ -418,9 +402,7 @@ namespace Application.Services.Implementations
                 }
                 return deleted;
             }
-            catch (CosmosException ex) when (
-               ex.StatusCode == HttpStatusCode.ServiceUnavailable ||
-               ex.StatusCode == HttpStatusCode.RequestTimeout)
+            catch (Exception ex)
             {
                 throw new ExternalServiceUnavailableException(
                     "Service is temporarily unavailable. Please try again later.",
@@ -461,9 +443,7 @@ namespace Application.Services.Implementations
                     LoanTenure = preQualifiedLoan.LoanTenure
                 };
             }
-            catch (CosmosException ex) when (
-               ex.StatusCode == HttpStatusCode.ServiceUnavailable ||
-               ex.StatusCode == HttpStatusCode.RequestTimeout)
+            catch (Exception ex)
             {
                 throw new ExternalServiceUnavailableException(
                     "Service is temporarily unavailable. Please try again later.",
@@ -491,9 +471,7 @@ namespace Application.Services.Implementations
                     LoanTenure = p.LoanTenure
                 }).ToList();
             }
-            catch (CosmosException ex) when (
-               ex.StatusCode == HttpStatusCode.ServiceUnavailable ||
-               ex.StatusCode == HttpStatusCode.RequestTimeout)
+            catch (Exception ex)
             {
                 throw new ExternalServiceUnavailableException(
                     "Service is temporarily unavailable. Please try again later.",
@@ -516,11 +494,10 @@ namespace Application.Services.Implementations
                     LoanType = preQualified.LoanType,
                     MinAmount = preQualified.MinAmount,
                     MaxAmount = preQualified.MaxAmount,
+                    LoanTenure = preQualified.LoanTenure
                 };
             }
-            catch (CosmosException ex) when (
-               ex.StatusCode == HttpStatusCode.ServiceUnavailable ||
-               ex.StatusCode == HttpStatusCode.RequestTimeout)
+            catch (Exception ex)
             {
                 throw new ExternalServiceUnavailableException(
                     "Service is temporarily unavailable. Please try again later.",
@@ -539,9 +516,7 @@ namespace Application.Services.Implementations
 
                 return deleted;
             }
-            catch (CosmosException ex) when (
-               ex.StatusCode == HttpStatusCode.ServiceUnavailable ||
-               ex.StatusCode == HttpStatusCode.RequestTimeout)
+            catch (Exception ex)
             {
                 throw new ExternalServiceUnavailableException(
                     "Service is temporarily unavailable. Please try again later.",
@@ -554,7 +529,21 @@ namespace Application.Services.Implementations
         // History Management
         public async Task<bool> DeleteLoanHistoryAsync(string loanHistoryId)
         {
-            return await _adminRepository.DeleteLoanHistoryAsync(loanHistoryId);
+            try
+            {
+                var deleted = await _adminRepository.DeleteLoanHistoryAsync(loanHistoryId);
+                if (!deleted)
+                    throw new NotFoundException("Loan history not found");
+
+                return deleted;
+            }
+            catch (Exception ex)
+            {
+                throw new ExternalServiceUnavailableException(
+                    "Service is temporarily unavailable. Please try again later.",
+                    ex
+                );
+            }
         }
     }
 }

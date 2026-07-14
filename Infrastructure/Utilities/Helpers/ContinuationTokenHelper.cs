@@ -18,7 +18,7 @@ namespace Infrastructure.Services.Utilities.Helpers
             var bytes = Encoding.UTF8.GetBytes(json);
             return Convert.ToBase64String(bytes);
         }
-
+        
         public static ContinuationTokenData? Decode(string? token)
         {
             if (string.IsNullOrEmpty(token))

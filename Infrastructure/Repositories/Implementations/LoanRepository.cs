@@ -1,9 +1,8 @@
 ﻿using Domain.Entities;
 using Domain.Enums;
 using Infrastructure.DbContexts;
-using Infrastructure.Repositories.Interfaces;
+using Application.Services.Interfaces.Repositories;
 using Infrastructure.Services.Utilities.Helpers;
-using Microsoft.Azure.Cosmos;
 using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Repositories.Repositories
@@ -86,6 +85,13 @@ namespace Infrastructure.Repositories.Repositories
             return await _context.Loans.FirstOrDefaultAsync(l => l.Id == loanId);
         }
 
+        public async Task<Loan?> GetApprovedLoanByUserIdAsync(string userId)
+        {
+            return await _context.Loans
+                .Where(l => l.UserProfileId == userId && l.Status == LoanStatus.Approved)
+                .FirstOrDefaultAsync();
+        }
+
         public async Task UpdateLoanAsync(Loan loan)
         {
             _context.Loans.Update(loan);
@@ -94,16 +100,16 @@ namespace Infrastructure.Repositories.Repositories
 
         public async Task AddLoanHistoryAsync(LoanHistory loanHistory)
         {
-            try
-            {
+            //try
+            //{
                 _context.LoanHistories.Add(loanHistory);
                 await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateException ex) when (ex.InnerException is CosmosException { StatusCode: System.Net.HttpStatusCode.Conflict })
-            {
-                // If it already exists, just detach it and ignore the error
-                _context.Entry(loanHistory).State = EntityState.Detached;
-            }
+            //}
+            //catch (DbUpdateException ex)
+            //{
+            //    // If it already exists or a DB update conflict occurs, detach and ignore the error
+            //    _context.Entry(loanHistory).State = EntityState.Detached;
+            //}
         }
 
         public async Task<bool> historyExists(string loanId)

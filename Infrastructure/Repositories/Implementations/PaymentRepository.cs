@@ -1,5 +1,5 @@
 ﻿using Infrastructure.DbContexts;
-using Infrastructure.Repositories.Interfaces;
+using Application.Services.Interfaces.Repositories;
 using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Domain.Enums;
@@ -47,6 +47,14 @@ namespace Infrastructure.Repositories.Implementations
         {
             return await _context.Payments
                 .FirstOrDefaultAsync(p => p.Id == paymentId);
+        }
+
+        public async Task<List<Payment>> GetPaymentsByLoanIdAsync(string loanId)
+        {
+            return await _context.Payments
+                .Where(p => p.LoanId == loanId)
+                .OrderByDescending(p => p.CreatedDate)
+                .ToListAsync();
         }
 
         public async Task<Payment?> GetPaymentByReferenceAsync(string reference)

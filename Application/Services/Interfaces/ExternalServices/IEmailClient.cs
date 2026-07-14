@@ -1,6 +1,4 @@
-﻿
-
-namespace Infrastructure.ExternalServices.Interfaces
+namespace Application.Services.Interfaces.ExternalServices
 {
     public interface IEmailClient
     {

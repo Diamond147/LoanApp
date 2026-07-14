@@ -1,13 +1,12 @@
 ﻿using Application.Exceptions;
 using Application.Extensions;
-using Application.Services.Interfaces;
+using Application.Services.Interfaces.Services;
 using Domain.DTOs.Users.RequestDto;
 using Domain.DTOs.Users.ResponseDto;
 using Domain.Entities;
 using Domain.Enums;
-using Infrastructure.Repositories.Interfaces;
+using Application.Services.Interfaces.Repositories;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Azure.Cosmos;
 using System.Net;
 
 namespace Application.Services.Implementations
@@ -40,9 +39,7 @@ namespace Application.Services.Implementations
             {
                 throw;
             }
-            catch (CosmosException ex) when (
-               ex.StatusCode == HttpStatusCode.ServiceUnavailable ||
-               ex.StatusCode == HttpStatusCode.RequestTimeout)
+            catch (Exception ex)
             {
                 throw new ExternalServiceUnavailableException(
                     "Service is temporarily unavailable. Please try again later.",
@@ -52,11 +49,11 @@ namespace Application.Services.Implementations
         }
 
 
-        public async Task<LoanDto?> CreateLoanAsync(LoanType loanType, CreateLoanDto createLoan)
+       
+        public async Task<LoanDto?> CreateLoanAsync(CreateLoanDto createLoan)
         {
             try
             {
-
                 var UserInfo = _httpContextAccessor.HttpContext?.User?.GetUserInfo(); // Get all user info at once
                 if (UserInfo == null)
                     throw new UnauthorizedAccessException("User is not authenticated");
@@ -67,20 +64,20 @@ namespace Application.Services.Implementations
                 if (hasUnpaidLoan)
                     throw new ValidationException("You have an existing unpaid loan that must be settled first");
 
-                var existingLoanType = await _loanRepository.GetPreQualifiedLoanByTypeAsync(loanType);
+                var existingLoanType = await _loanRepository.GetPreQualifiedLoanByTypeAsync(createLoan.loanType);
                 if (existingLoanType == null)
-                    throw new NotFoundException($"Loan of type {loanType} is not currently available");
+                    throw new NotFoundException($"Loan of type {createLoan.loanType} is not currently available");
 
                 if (createLoan.Amount <= 0)
                     throw new ValidationException("Requested amount must be greater than zero");
 
                 if (createLoan.Amount < existingLoanType.MinAmount || createLoan.Amount > existingLoanType.MaxAmount)
-                    throw new ValidationException($"Incorrect amount for the {loanType} loan type.");
+                    throw new ValidationException($"Incorrect amount for the {createLoan.loanType} loan type.");
 
                 var loan = new Loan
                 {
                     UserProfileId = AuthUserId,
-                    LoanType = loanType,
+                    LoanType = createLoan.loanType,
                     Amount = createLoan.Amount,
                     RequestedDate = DateTime.UtcNow,
                     Status = LoanStatus.Pending,
@@ -109,9 +106,7 @@ namespace Application.Services.Implementations
                     UserProfileId = loan.UserProfileId
                 };
             }
-            catch (CosmosException ex) when (
-               ex.StatusCode == HttpStatusCode.ServiceUnavailable ||
-               ex.StatusCode == HttpStatusCode.RequestTimeout)
+            catch (Exception ex)
             {
                 throw new ExternalServiceUnavailableException(
                     "Service is temporarily unavailable. Please try again later.",
@@ -151,9 +146,7 @@ namespace Application.Services.Implementations
                     HasMore = !string.IsNullOrEmpty(newContinuationToken)
                 };
             }
-            catch (CosmosException ex) when (
-               ex.StatusCode == HttpStatusCode.ServiceUnavailable ||
-               ex.StatusCode == HttpStatusCode.RequestTimeout)
+            catch (Exception ex)
             {
                 throw new ExternalServiceUnavailableException(
                     "Service is temporarily unavailable. Please try again later.",
@@ -183,9 +176,7 @@ namespace Application.Services.Implementations
             {
                 throw;
             }
-            catch (CosmosException ex) when (
-               ex.StatusCode == HttpStatusCode.ServiceUnavailable ||
-               ex.StatusCode == HttpStatusCode.RequestTimeout)
+            catch (Exception ex)
             {
                 throw new ExternalServiceUnavailableException(
                     "Service is temporarily unavailable. Please try again later.",

@@ -8,7 +8,7 @@ namespace Infrastructure.DbContexts
         public AppDbContext(DbContextOptions<AppDbContext> options)
             : base(options)
         { }
-        
+
         public DbSet<UserProfile> UserProfiles { get; set; } = null!;
         public DbSet<Loan> Loans { get; set; } = null!;
         public DbSet<LoanHistory> LoanHistories { get; set; } = null!;
@@ -18,84 +18,93 @@ namespace Infrastructure.DbContexts
 
         protected override void OnModelCreating(ModelBuilder modelBuilder) 
         {
+            // UserProfile - one user has many loans
             modelBuilder.Entity<UserProfile>(entity =>
             {
-                entity.ToContainer("UserProfiles");
-                entity.HasPartitionKey(u => u.Id);
-                entity.Property(u => u.Id).ToJsonProperty("id");
                 entity.HasKey(u => u.Id);
-                entity.HasNoDiscriminator();
+                entity.Property(u => u.FirstName).IsRequired().HasMaxLength(100);
+                entity.Property(u => u.LastName).IsRequired().HasMaxLength(100);
+                entity.Property(u => u.Email).IsRequired().HasMaxLength(255);
+                entity.Property(u => u.Gender).HasMaxLength(50);
+                entity.Property(u => u.MobileNumber).HasMaxLength(20);
+                entity.Property(u => u.Nationality).HasMaxLength(100);
+
+                // Index on email for quick lookups
+                entity.HasIndex(u => u.Email).IsUnique();
             });
 
+            // Loan - one user has many loans
             modelBuilder.Entity<Loan>(entity =>
             {
-                entity.ToContainer("Loans");
-                entity.HasPartitionKey(l => l.UserProfileId);
-                entity.Property(l => l.Id).ToJsonProperty("id");
                 entity.HasKey(l => l.Id);
-                entity.HasNoDiscriminator();
-                // Store enums as strings
-                entity.Property(l => l.Status)
-                .HasConversion<string>();
-                entity.Property(l => l.LoanType)
-                .HasConversion<string>();
+                entity.Property(l => l.Status).HasConversion<string>().IsRequired();
+                entity.Property(l => l.LoanType).HasConversion<string>().IsRequired();
+                entity.Property(l => l.Amount).HasPrecision(18, 2);
+                entity.Property(l => l.ApprovedAmount).HasPrecision(18, 2);
+
+                // Foreign key to UserProfile
+                entity.HasOne<UserProfile>()
+                    .WithMany(u => u.Loans)
+                    .HasForeignKey(l => l.UserProfileId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(l => l.UserProfileId);
+                entity.HasIndex(l => l.Status);
             });
 
+            // LoanHistory - tracks changes to a loan
             modelBuilder.Entity<LoanHistory>(entity =>
             {
-                entity.ToContainer("LoanHistories");
-                entity.HasPartitionKey(lh => lh.UserProfileId);
-                entity.Property(lh => lh.Id).ToJsonProperty("id");
                 entity.HasKey(lh => lh.Id);
-                entity.HasNoDiscriminator();
-                // Store enums as strings
-                entity.Property(lh => lh.Status)
-                .HasConversion<string>();
-                entity.Property(lh => lh.LoanType)
-                .HasConversion<string>();
+                entity.Property(lh => lh.Status).HasConversion<string>().IsRequired();
+                entity.Property(lh => lh.LoanType).HasConversion<string>().IsRequired();
+
+                // Foreign key to Loan (explicitly specify dependent navigation to avoid shadow FK)
+                entity.HasOne(lh => lh.Loan)
+                    .WithMany(l => l.LoanHistories)
+                    .HasForeignKey(lh => lh.LoanId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(lh => lh.LoanId);
+                entity.HasIndex(lh => lh.UserProfileId);
             });
 
-            modelBuilder.Entity<LoanHistory>()
-                .HasOne(lh => lh.Loan)
-                .WithMany(l => l.LoanHistories)
-                .HasForeignKey(lh => lh.LoanId);
-
+            // PreQualifiedLoan - available loan products
             modelBuilder.Entity<PreQualifiedLoan>(entity =>
             {
-                entity.ToContainer("PreQualifiedLoans");
-                entity.HasPartitionKey(p => p.Id);
-                entity.Property(p => p.Id).ToJsonProperty("id");
                 entity.HasKey(p => p.Id);
-                entity.HasNoDiscriminator();
-                // Store enums as strings
-                entity.Property(p => p.LoanType)
-                .HasConversion<string>();
+                entity.Property(p => p.LoanType).HasConversion<string>().IsRequired();
+                entity.Property(p => p.MinAmount).HasPrecision(18, 2);
+                entity.Property(p => p.MaxAmount).HasPrecision(18, 2);
+                entity.HasIndex(p => p.LoanType);
             });
 
+            // Payment - payment for a loan
             modelBuilder.Entity<Payment>(entity =>
             {
-                entity.ToContainer("Payments");
-                entity.HasPartitionKey(py => py.UserProfileId);
-                entity.Property(py => py.Id).ToJsonProperty("id");
                 entity.HasKey(py => py.Id);
-                entity.HasNoDiscriminator();
-                // Store enums as strings
-                entity.Property(py => py.Status)
-                .HasConversion<string>();
+                entity.Property(py => py.Status).HasConversion<string>().IsRequired();
+                entity.Property(py => py.Amount).HasPrecision(18, 2);
+                entity.Property(py => py.PaystackReference).HasMaxLength(255);
 
-                entity.HasIndex(py => py.PaystackReference);
+                entity.HasIndex(py => py.PaystackReference).IsUnique();
                 entity.HasIndex(py => py.LoanId);
+                entity.HasIndex(py => py.UserProfileId);
+                entity.HasIndex(py => py.Status);
             });
 
+            // EmailLog - audit trail for emails sent
             modelBuilder.Entity<EmailLog>(entity =>
             {
-                entity.ToContainer("EmailLogs");
-                entity.HasPartitionKey(e => e.UserProfileId);
-                entity.Property(e => e.Id).ToJsonProperty("id");
                 entity.HasKey(e => e.Id);
-                entity.HasNoDiscriminator();
+                entity.Property(e => e.EmailAddress).IsRequired().HasMaxLength(255);
+                entity.Property(e => e.Subject).IsRequired();
+                entity.Property(e => e.Body).IsRequired();
+                entity.Property(e => e.EmailType).HasMaxLength(100);
 
+                entity.HasIndex(e => e.UserProfileId);
                 entity.HasIndex(e => e.EmailType);
+                entity.HasIndex(e => e.SentDate);
             });
         }
     }

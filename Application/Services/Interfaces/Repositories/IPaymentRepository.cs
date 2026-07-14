@@ -1,9 +1,7 @@
-﻿
-
 using Domain.Entities;
 using Domain.Enums;
 
-namespace Infrastructure.Repositories.Interfaces
+namespace Application.Services.Interfaces.Repositories
 {
     public interface IPaymentRepository
     {
@@ -13,6 +11,7 @@ namespace Infrastructure.Repositories.Interfaces
         // used to find payment when webhook arrives and verify payment
         Task<Payment?> GetPaymentByReferenceAsync(string reference);
         Task<Payment?> GetPaymentByIdAsync(string paymentId);
+        Task<List<Payment>> GetPaymentsByLoanIdAsync(string loanId);
         Task<List<Payment>> GetPaymentsAsync(PaymentStatus? status = null, string? paymentId = null, string? reference = null);
         Task<Payment> UpdatePaymentAsync(Payment payment);
     }

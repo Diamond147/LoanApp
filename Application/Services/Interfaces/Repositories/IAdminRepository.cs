@@ -1,14 +1,22 @@
-﻿using Domain.Entities;
+using Domain.Entities;
 using Domain.Enums;
 
-namespace Infrastructure.Repositories.Interfaces
+namespace Application.Services.Interfaces.Repositories
 {
     public interface IAdminRepository
     {
 
         // Dashboard Statistics
         Task<AdminDashboardStats> GetDashboardStatsAsync();
-        Task<(List<UserProfile> Users, string? ContinuationToken)> GetAllUsersDetailsAsync(int pageSize, string? continuationToken, string? userId = null);
+        Task<(List<UserProfile> Users, string? ContinuationToken)> GetAllUsersDetailsAsync(
+            int pageSize = 10,
+            string? continuationToken = null,
+            string? userId = null,
+            string? email = null,
+            string? mobileNumber = null,
+            string? gender = null,
+            string? nationality = null,
+            string? searchTerm = null);
 
 
         // User Management
