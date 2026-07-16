@@ -4,6 +4,7 @@ namespace Application.Services.Interfaces.Repositories
 {
     public interface IUserRepository
     {
+        Task<bool> AnyAsync();
         Task AddUserAsync(UserProfile userProfile);
         Task<UserProfile?> GetUserDashboardAsync(string userId);
         Task<UserProfile?> GetUserByIdAsync(string userId);
@@ -12,7 +13,7 @@ namespace Application.Services.Interfaces.Repositories
         Task<UserProfile?> SearchUserAsync(string searchTerm);
         Task<IEnumerable<UserProfile>> GetUsersByGenderAsync(string gender);
         Task<IEnumerable<UserProfile>> GetUsersByNationalityAsync(string nationality);
-        Task<UserProfile> UpdateUserProfileAsync(UserProfile user);
+        Task<UserProfile> UpdateUserAsync(UserProfile user);
         Task<UserProfile> PatchUserAsync(UserProfile user);
         Task<UserProfile?> DeleteUserAsync(string userId);
     }

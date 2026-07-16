@@ -52,6 +52,8 @@ namespace Application.Services.Implementations
                     throw new InvalidOperationException("A user with this email already exists.");
                 }
 
+                var isFirstUser = !await _userRepository.AnyAsync();
+
                 // Create new profile
                 var userProfile = new UserProfile
                 {
@@ -60,6 +62,7 @@ namespace Application.Services.Implementations
                     LastName = createUserProfileDto.LastName,
                     Email = createUserProfileDto.Email,
                     PasswordHash = HashPassword(createUserProfileDto.Password),
+                    Role = isFirstUser ? "Admin" : "User", // Automatic promotion for the first account
                     Gender = createUserProfileDto.Gender,
                     DateOfBirth = createUserProfileDto.DateOfBirth,
                     MobileNumber = createUserProfileDto.MobileNumber,
@@ -99,7 +102,7 @@ namespace Application.Services.Implementations
                 throw new UnauthorizedAccessException("Invalid credentials");
 
             // Use the token service to mint the JWT string
-            var roles = new[] { "User" };
+            var roles = new[] { user.Role ?? "User" };
             var token = _tokenService.GenerateAccessToken(user.Id, user.Email, roles);
 
             return new LoginResponseDto {
@@ -139,7 +142,7 @@ namespace Application.Services.Implementations
                 existingUser.MobileNumber = completeProfileDto.MobileNumber;
                 existingUser.Nationality = completeProfileDto.Nationality;
 
-                await _userRepository.UpdateUserProfileAsync(existingUser);
+                await _userRepository.UpdateUserAsync(existingUser);
 
                 return new UserProfileDto
                 {
@@ -220,11 +223,11 @@ namespace Application.Services.Implementations
                 }
 
                 // Update only provided fields
-                if (!string.IsNullOrEmpty(updateUser.Gender))
-                    existingUser.Gender = updateUser.Gender;
+                //if (!string.IsNullOrEmpty(updateUser.Gender))
+                //    existingUser.Gender = updateUser.Gender;
 
-                if (updateUser.DateOfBirth != null)
-                    existingUser.DateOfBirth = updateUser.DateOfBirth;
+                //if (updateUser.DateOfBirth != null)
+                //    existingUser.DateOfBirth = updateUser.DateOfBirth;
 
                 if (!string.IsNullOrEmpty(updateUser.MobileNumber))
                     existingUser.MobileNumber = updateUser.MobileNumber;
@@ -232,7 +235,7 @@ namespace Application.Services.Implementations
                 if (!string.IsNullOrEmpty(updateUser.Nationality))
                     existingUser.Nationality = updateUser.Nationality;
 
-                await _userRepository.UpdateUserProfileAsync(existingUser);
+                await _userRepository.UpdateUserAsync(existingUser);
 
                 return new UserProfileDto
                 {
@@ -274,10 +277,10 @@ namespace Application.Services.Implementations
 
                 if (patchUser.FirstName != null) user.FirstName = patchUser.FirstName;
                 if (patchUser.LastName != null) user.LastName = patchUser.LastName;
-                if (patchUser.Gender != null) user.Gender = patchUser.Gender;
                 if (patchUser.MobileNumber != null) user.MobileNumber = patchUser.MobileNumber;
-                if (patchUser.Nationality != null) user.Nationality = patchUser.Nationality;
-                if (patchUser.DateOfBirth != null) user.DateOfBirth = patchUser.DateOfBirth.Value;
+                //if (patchUser.Gender != null) user.Gender = patchUser.Gender;
+                //if (patchUser.Nationality != null) user.Nationality = patchUser.Nationality;
+                //if (patchUser.DateOfBirth != null) user.DateOfBirth = patchUser.DateOfBirth.Value;
 
                 await _userRepository.PatchUserAsync(user);
                 return new UserProfileDto

@@ -1,11 +1,12 @@
-﻿using Application.Exceptions;
+﻿using Application.DTOs;
+using Application.Exceptions;
+using Application.Services.Interfaces.Repositories;
 using Application.Services.Interfaces.Services;
 using Domain.DTOs.Admin;
 using Domain.DTOs.Users.RequestDto;
 using Domain.DTOs.Users.ResponseDto;
 using Domain.Entities;
 using Domain.Enums;
-using Application.Services.Interfaces.Repositories;
 using System.Net;
 
 namespace Application.Services.Implementations
@@ -215,6 +216,34 @@ namespace Application.Services.Implementations
             }
         }
 
+        // Changing user role to either "Admin" or "User"
+        public async Task ChangeUserRoleAsync(string UserId, ChangeRoleDto dto)
+        {
+            // Input Validation
+            if (string.IsNullOrEmpty(dto.NewRole))
+            {
+                throw new ArgumentException("Role cannot be empty.");
+            }
+
+            // Normalize role input to ensure case-insensitivity
+            var normalizedRole = char.ToUpper(dto.NewRole[0]) + dto.NewRole.Substring(1).ToLower();
+            if (normalizedRole != "Admin" && normalizedRole != "User")
+            {
+                throw new ArgumentException("Invalid role. Allowed roles are 'Admin' or 'User'.");
+            }
+
+            // Fetch User
+            var user = await _userRepository.GetUserByIdAsync(UserId);
+            if (user == null)
+            {
+                throw new NotFoundException($"User with ID {UserId} not found.");
+            }
+
+            user.Role = normalizedRole;
+            await _userRepository.UpdateUserAsync(user);
+        }
+
+
         public async Task<bool> DeleteUserAsync(string userId)
         {
             try
@@ -413,7 +442,7 @@ namespace Application.Services.Implementations
 
 
         // PreQualified Management
-        public async Task<PreQualifiedLoanDto?> CreatePreQualifiedLoanAsync(LoanType loanType, CreatePreQualifiedLoanDto createPqLoan)
+        public async Task<PreQualifiedLoanDto?> CreatePreQualifiedLoanAsync(CreatePreQualifiedLoanDto createPqLoan)
         {
             try
             {
@@ -426,7 +455,7 @@ namespace Application.Services.Implementations
 
                 var preQualifiedLoan = new PreQualifiedLoan
                 {
-                    LoanType = loanType,
+                    LoanType = createPqLoan.LoanType,
                     MinAmount = createPqLoan.MinAmount,
                     MaxAmount = createPqLoan.MaxAmount,
                     LoanTenure = createPqLoan.LoanTenure

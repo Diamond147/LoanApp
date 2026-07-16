@@ -6,9 +6,9 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Presentation.Controllers
 {
-    //[Authorize]
     [ApiController]
     [Route("api")]
+    //[Authorize(Roles = "User,Admin")]
     public class LoanController : ControllerBase
     {
         private readonly ILoanService _loanService;
@@ -27,6 +27,7 @@ namespace Presentation.Controllers
             _emailService=emailService;
         }
 
+        [AllowAnonymous]
         [HttpPost("register")]
         public async Task<IActionResult> CreateUserProfile([FromBody] CreateUserProfileDto dto)
         {
@@ -34,6 +35,7 @@ namespace Presentation.Controllers
             return CreatedAtAction(nameof(CreateUserProfile), new { id = userProfile?.Id }, userProfile);
         }
 
+        [AllowAnonymous]
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequestDto request)
         {
@@ -41,6 +43,7 @@ namespace Presentation.Controllers
             return Ok(result);
         }
 
+        [Authorize(Roles = "User")]
         [HttpGet("users/{userId}")]
         public async Task<IActionResult> GetUser(string userId)
         {
@@ -70,6 +73,7 @@ namespace Presentation.Controllers
             return Ok(result);
         }
 
+        [Authorize(Roles = "Admin")]
         [HttpDelete("users/{userId}")]
         public async Task<IActionResult> DeleteUser(string userId)
         {
@@ -108,8 +112,8 @@ namespace Presentation.Controllers
 
         //PAYMENTS
 
-        [HttpPost("loanpayment")]
         [AllowAnonymous]
+        [HttpPost("loanpayment")]
         public async Task<IActionResult> InitiatePayment()
         {
             var result = await _paymentService.InitiatePaymentAsync();
@@ -121,8 +125,8 @@ namespace Presentation.Controllers
             });
         }
 
-        [HttpGet("payments")]
         [AllowAnonymous]
+        [HttpGet("payments")]
         public async Task<IActionResult> GetPayments([FromQuery] PaymentStatus? status = null, [FromQuery] string? paymentId = null, [FromQuery] string? reference = null)
         {
             var result = await _paymentService.GetPaymentsAsync(status, paymentId, reference);

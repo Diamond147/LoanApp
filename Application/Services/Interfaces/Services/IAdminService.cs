@@ -1,3 +1,4 @@
+using Application.DTOs;
 using Domain.DTOs.Admin;
 using Domain.DTOs.Users.RequestDto;
 using Domain.DTOs.Users.ResponseDto;
@@ -16,6 +17,7 @@ namespace Application.Services.Interfaces.Services
         // User Management
         Task<ContinuationResponse<AdminUserDto>> GetUsersWithContinuationAsync(int pageSize, string? continuationToken, string? userId);
         Task<AdminUserDto?> GetUserByIdAsync(string userId);
+        Task ChangeUserRoleAsync(string UserId, ChangeRoleDto dto);
         Task<bool> DeleteUserAsync(string userId);
 
 
@@ -28,7 +30,7 @@ namespace Application.Services.Interfaces.Services
 
 
         // PreQualified Management
-        Task<PreQualifiedLoanDto?> CreatePreQualifiedLoanAsync(LoanType loanType, CreatePreQualifiedLoanDto createPqLoan);
+        Task<PreQualifiedLoanDto?> CreatePreQualifiedLoanAsync(CreatePreQualifiedLoanDto createPqLoan);
         Task<List<PreQualifiedLoanDto>> GetAllPreQualifiedLoansAsync(LoanType? loanType, string? preQualifiedId);
         Task<PreQualifiedLoanDto?> GetPreQualifiedLoanByIdAsync(string preQualifiedId);
         Task<bool> DeletePreQualifiedLoanAsync(string preQualifiedId);

@@ -14,6 +14,12 @@ namespace Infrastructure.Repositories.Repositories
             _context = context;
         }
 
+
+        public async Task<bool> AnyAsync()
+        {
+            return await _context.UserProfiles.AnyAsync();
+        }
+
         public async Task AddUserAsync(UserProfile userProfile)
         {
             _context.UserProfiles.Add(userProfile);
@@ -182,7 +188,7 @@ namespace Infrastructure.Repositories.Repositories
             }
             return users;
         }
-        public async Task<UserProfile> UpdateUserProfileAsync(UserProfile user)
+        public async Task<UserProfile> UpdateUserAsync(UserProfile user)
         {
             _context.UserProfiles.Update(user);
             await _context.SaveChangesAsync();

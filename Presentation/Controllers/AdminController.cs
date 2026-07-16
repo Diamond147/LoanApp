@@ -1,4 +1,5 @@
-﻿using Application.Services.Interfaces.Services;
+﻿using Application.DTOs;
+using Application.Services.Interfaces.Services;
 using Domain.DTOs.Payments;
 using Domain.DTOs.Users.RequestDto;
 using Domain.Enums;
@@ -10,8 +11,8 @@ using System.Text;
 namespace Presentation.Controllers
 {
     [ApiController]
-    //[Route("api/admin")]
-    //[Authorize(Policy = "AdminPolicy")]
+    [Route("api/admin")]
+    [Authorize(Roles = "Admin")]
     public class AdminController : ControllerBase
     {
         private readonly IAdminService _adminService;
@@ -62,6 +63,13 @@ namespace Presentation.Controllers
         //    return Ok(result);
         //}
 
+        [HttpPost("users/{userId}/change-role")]
+        public async Task<IActionResult> ChangeRole(string userId, [FromBody] ChangeRoleDto dto)
+        {
+            await _adminService.ChangeUserRoleAsync(userId, dto);
+            return Ok(new { message = "User role successfully updated." });
+        }
+
         [HttpDelete("users/{userId}")]
         public async Task<IActionResult> DeleteUser(string userId)
         {
@@ -82,8 +90,8 @@ namespace Presentation.Controllers
             return Ok(result);
         }
 
-        [HttpPatch("loans/updatestatus")]
-        public async Task<IActionResult> UpdateLoanStatus([FromQuery] string loanId, [FromQuery] LoanStatus newStatus)
+        [HttpPost("loans/{loanId}/update-status")]
+        public async Task<IActionResult> UpdateLoanStatus(string loanId, [FromBody] LoanStatus newStatus)
         {
             var result = await _adminService.UpdateLoanStatusAsync(loanId, newStatus);
             return Ok(new { message = $"Loan {newStatus} Successfully", data = result });
@@ -106,9 +114,9 @@ namespace Presentation.Controllers
 
 
         [HttpPost("prequalifiedloans")]
-        public async Task<IActionResult> CreatePreQualifiedLoan([FromQuery] LoanType loanType, [FromBody] CreatePreQualifiedLoanDto createPqLoan)
+        public async Task<IActionResult> CreatePreQualifiedLoan([FromBody] CreatePreQualifiedLoanDto createPqLoan)
         {
-            var preQualifiedLoan = await _adminService.CreatePreQualifiedLoanAsync(loanType, createPqLoan);
+            var preQualifiedLoan = await _adminService.CreatePreQualifiedLoanAsync(createPqLoan);
             return CreatedAtAction(nameof(CreatePreQualifiedLoan), new { id = preQualifiedLoan?.Id }, preQualifiedLoan);
         }
 

@@ -1,23 +1,24 @@
 using Application.Services.Implementations;
-using Application.Services.Interfaces.Services;
-using Application.Services.Interfaces.Repositories;
 using Application.Services.Interfaces.ExternalServices;
+using Application.Services.Interfaces.Repositories;
+using Application.Services.Interfaces.Services;
+using DotNetEnv;
 using Infrastructure.DbContexts;
 using Infrastructure.ExternalServices;
 using Infrastructure.ExternalServices.Implementations;
 using Infrastructure.Repositories.Implementations;
 using Infrastructure.Repositories.Repositories;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Identity.Web;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Npgsql.EntityFrameworkCore.PostgreSQL;
 using Presentation.Filters;
 using Presentation.Middlewares;
-using System.Text.Json.Serialization;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
+using System.Security.Claims;
 using System.Security.Cryptography;
-using DotNetEnv;
+using System.Text.Json.Serialization;
 
 
 // Load the .env file into the system environment(requires DotNetEnv package)
@@ -26,7 +27,7 @@ Env.Load();
 var builder = WebApplication.CreateBuilder(args);
 
 
-//// Industry Standard: Pull the fully built string straight from Configuration
+// Industry Standard: Pull the fully built string straight from Configuration
 //var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
 var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING")
@@ -36,10 +37,6 @@ var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING"
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString, b =>
         b.MigrationsAssembly("Infrastructure")));
-//builder.Services.AddDbContext<AppDbContext>(options =>
-//{
-//    options.UseNpgsql(connectionString);
-//});
 
 
 builder.Services.AddHttpContextAccessor();
@@ -74,10 +71,12 @@ builder.Services.AddHttpClient<IPaystackClient, PaystackClient>((serviceProvider
     client.Timeout = TimeSpan.FromSeconds(30); // 30 second timeout
 });
 
+
 // Register PaystackClient with secret key from environment variables
 builder.Services.AddScoped<IPaystackClient>(provider =>
 {
     var httpClient = provider.GetRequiredService<HttpClient>();
+
     // Read Paystack secret key from environment variable (for security)
     var secretKey = Environment.GetEnvironmentVariable("PAYSTACK_SECRET_KEY") ?? "dummy_secret_key";
         //?? throw new InvalidOperationException("PAYSTACK_SECRET_KEY environment variable is missing");
@@ -150,7 +149,7 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
-    // 1. Fetch and decode the Base64 Public Key from configuration
+    // Fetch and decode the Base64 Public Key from configuration
     var publicKeyBase64 = builder.Configuration["Jwt:RsaPublicKey"]?.Trim()
         ?? throw new InvalidOperationException("RSA Public Key is missing");
 
@@ -167,11 +166,14 @@ builder.Services.AddAuthentication(options =>
         ValidIssuer = builder.Configuration["Jwt:Issuer"],
         ValidAudience = builder.Configuration["Jwt:Audience"],
 
-        // 2. Use the Asymmetric RsaSecurityKey
+        // Use the Asymmetric RsaSecurityKey
         IssuerSigningKey = new RsaSecurityKey(rsa),
 
-        // 3. Strictly enforce RS256 algorithm
-        ValidAlgorithms = new[] { SecurityAlgorithms.RsaSha256 }
+        // Strictly enforce RS256 algorithm
+        ValidAlgorithms = new[] { SecurityAlgorithms.RsaSha256 },
+
+        // Map the "role" claim to the standard ClaimTypes.Role for Role-Based Authorization (RBAC).
+        RoleClaimType = ClaimTypes.Role
     };
 });
 
@@ -204,6 +206,12 @@ if (app.Environment.IsDevelopment())
         c.OAuthUsePkce();
     });
 }
+if (!app.Environment.IsDevelopment())
+{
+    // Enforce HSTS (HTTP Strict Transport Security) in production - redirects HTTP requests to HTTPS and prevents downgrade attacks.
+    app.UseHsts();
+}
+
 
 app.UseHttpsRedirection();
 
