@@ -52,6 +52,5 @@ namespace Domain.DTOs.Users.RequestDto
         [RegularExpression(@"^[a-zA-Z\s]+$", ErrorMessage = "Invalid nationality value.")]
         public string? Nationality { get; set; }
 
-        //public DateTime SignUpDate { get; set; }
     }
 }

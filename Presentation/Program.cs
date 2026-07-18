@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Identity.Web;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Any;
 using Microsoft.OpenApi.Models;
 using Npgsql.EntityFrameworkCore.PostgreSQL;
 using Presentation.Filters;
@@ -124,7 +125,7 @@ builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo
     {
-        Title = "Loan API",
+        Title = "Loan Application API",
         Version = "v1",
         Description = "Endpoints for the loan application system"
     });
@@ -132,53 +133,101 @@ builder.Services.AddSwaggerGen(c =>
     // Add the custom enum schema filter
     c.SchemaFilter<EnumSchemaFilter>();
 
-     //Display enums as strings in Swagger UI
+    //Display enums as strings in Swagger UI
     c.UseInlineDefinitionsForEnums();
 
-    // TODO: Add OAuth2 security definition when you have an auth provider configured
-    // c.AddSecurityDefinition("oauth2", ...);
-    // c.AddSecurityRequirement(...);
+    // Forces Swagger to ignore validation attributes when generating examples
+    c.SupportNonNullableReferenceTypes();
+
+    // Globally tells Swagger to use simple placeholders instead of fuzzing regex patterns
+    c.MapType<string>(() => new OpenApiSchema { Type = "string", Example = new OpenApiString("string") });
+
+    // Add OAuth2 security definition when you have an auth provider configured
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "JWT Authorization header using the Bearer scheme.",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer"
+    });
+
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                },
+                Scheme = "oauth2",
+                Name = "Bearer",
+                In = ParameterLocation.Header
+            },
+            new List<string>()
+        }
+    });
 });
 
 
-// Configure authentication with an auth provider (Azure AD, custom RSA asymmetric, Auth0, etc.)
-builder.Services.AddAuthentication(options =>
 {
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-})
-.AddJwtBearer(options =>
-{
-    // Fetch and decode the Base64 Public Key from configuration
-    var publicKeyBase64 = builder.Configuration["Jwt:RsaPublicKey"]?.Trim()
-        ?? throw new InvalidOperationException("RSA Public Key is missing");
-
-    var rsa = RSA.Create();
- 
-    rsa.ImportRSAPublicKey(Convert.FromBase64String(publicKeyBase64), out _);
-
-    options.TokenValidationParameters = new TokenValidationParameters
+    // Configure JWT Authentication globally for both Dev and Prod environments, validate incoming JWTs using configured RSA public key (RS256)
+    builder.Services.AddAuthentication(options =>
     {
-        ValidateIssuer = true,
-        ValidateAudience = true,
-        ValidateLifetime = true,
-        ValidateIssuerSigningKey = true,
-        ValidIssuer = builder.Configuration["Jwt:Issuer"],
-        ValidAudience = builder.Configuration["Jwt:Audience"],
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(options =>
+    {
+        // Fetch and decode the Base64 Public Key from configuration
+        var publicKeyBase64 = builder.Configuration["Jwt:RsaPublicKey"]?.Trim()
+            ?? throw new InvalidOperationException("RSA Public Key is missing");
+
+        var rsa = RSA.Create();
+        rsa.ImportRSAPublicKey(Convert.FromBase64String(publicKeyBase64), out _);
+
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
 
         // Use the Asymmetric RsaSecurityKey
-        IssuerSigningKey = new RsaSecurityKey(rsa),
+            IssuerSigningKey = new RsaSecurityKey(rsa),
 
         // Strictly enforce RS256 algorithm
-        ValidAlgorithms = new[] { SecurityAlgorithms.RsaSha256 },
+            ValidAlgorithms = new[] { SecurityAlgorithms.RsaSha256 },
 
         // Map the "role" claim to the standard ClaimTypes.Role for Role-Based Authorization (RBAC).
-        RoleClaimType = ClaimTypes.Role
-    };
-});
+            RoleClaimType = ClaimTypes.Role
+        };
 
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                // Intercept the request to extract the token from a secure HttpOnly cookie
+                if (context.Request.Cookies.TryGetValue("X-Access-Token", out var token))
+                {
+                    context.Token = token;
+                }
+                return Task.CompletedTask;
+            },
+            OnAuthenticationFailed = context =>
+            {
+                Console.WriteLine($"Token validation failed: {context.Exception.Message}");
+                return Task.CompletedTask;
+            }
+        };
+    });
 
-builder.Services.AddAuthorization();
+    builder.Services.AddAuthorization();
+}
 // Add Authorization with policy
 //builder.Services.AddAuthorization(options =>
 //{
@@ -201,7 +250,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI(c =>
     {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Loan API V1");
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Loan Application API V1");
         //c.OAuthClientId(builder.Configuration["SwaggerAzureAd:ClientId"]);  
         c.OAuthUsePkce();
     });

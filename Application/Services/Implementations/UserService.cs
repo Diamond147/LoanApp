@@ -105,13 +105,47 @@ namespace Application.Services.Implementations
             var roles = new[] { user.Role ?? "User" };
             var token = _tokenService.GenerateAccessToken(user.Id, user.Email, roles);
 
-            return new LoginResponseDto {
-                AccessToken = token,
+            var httpContext = _httpContextAccessor.HttpContext
+            ?? throw new InvalidOperationException("HTTP context is unavailable.");
+
+            var cookieOptions = new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.Strict,
+                Expires = DateTimeOffset.UtcNow.AddHours(2)
+            };
+
+            // Inject the token safely into the encrypted cookie jar
+            httpContext.Response.Cookies.Append("X-Access-Token", token, cookieOptions);
+
+            // Return profile data to the frontend without exposing the raw token string
+            return new LoginResponseDto
+            {
                 Email = user.Email,
                 FirstName = user.FirstName,
                 LastName = user.LastName
             };
         }
+
+
+        public Task LogoutAsync()
+        {
+            var httpContext = _httpContextAccessor.HttpContext
+                ?? throw new InvalidOperationException("HTTP context is unavailable.");
+
+            // Expire the cookie instantly to force browser deletion
+            httpContext.Response.Cookies.Append("X-Access-Token", "", new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.Strict,
+                Expires = DateTimeOffset.UtcNow.AddDays(-1)
+            });
+
+            return Task.CompletedTask;
+        }
+
 
 
         // Complete user profile with additional information

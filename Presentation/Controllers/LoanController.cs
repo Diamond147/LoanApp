@@ -8,7 +8,7 @@ namespace Presentation.Controllers
 {
     [ApiController]
     [Route("api")]
-    //[Authorize(Roles = "User,Admin")]
+    [Authorize(Roles = "User,Admin")]
     public class LoanController : ControllerBase
     {
         private readonly ILoanService _loanService;
@@ -43,7 +43,14 @@ namespace Presentation.Controllers
             return Ok(result);
         }
 
-        [Authorize(Roles = "User")]
+        //[Authorize]
+        [HttpPost("logout")]
+        public async Task<IActionResult> Logout()
+        {
+            await _userService.LogoutAsync();
+            return Ok(new { message = "Logged out successfully" });
+        }
+
         [HttpGet("users/{userId}")]
         public async Task<IActionResult> GetUser(string userId)
         {
