@@ -11,32 +11,25 @@ namespace Application.Services.Interfaces.Services
     {
         // Dashboard
         Task<AdminDashboardStats> GetDashboardStatsAsync();
-        Task<ContinuationResponse<AdminUserDetailDto>> GetAllUsersDetailsAsync(int pageSize, string? continuationToken, string? userId, string? email, string? mobileNumber, string? gender, string? nationality, string? searchTerm);
 
 
         // User Management
-        Task<ContinuationResponse<AdminUserDto>> GetUsersWithContinuationAsync(int pageSize, string? continuationToken, string? userId);
-        Task<AdminUserDto?> GetUserByIdAsync(string userId);
-        Task ChangeUserRoleAsync(string UserId, ChangeRoleDto dto);
-        Task<bool> DeleteUserAsync(string userId);
+        //Task<ContinuationResponse<AdminUserDetailDto>> GetAllUsersDetailsAsync(int pageSize, string? continuationToken, string? userId, string? email, string? mobileNumber, string? gender, string? nationality, string? searchTerm);
+        //Task<ContinuationResponse<AdminUserDto>> GetAllUsersAsync(int pageSize, string? continuationToken, string? userId);
+        //Task<AdminUserDto?> GetUserByIdAsync(string userId);
+        //Task ChangeUserRoleAsync(string UserId, ChangeRoleDto dto);
+        //Task<bool> DeleteUserAsync(string userId);
 
 
         // Loan Management
-        Task<ContinuationResponse<AdminLoanDto>> GetLoansWithContinuationAsync(int pageSize, string? continuationToken, LoanStatus? status = null, string? loanId = null);
-        //Task<bool> MarkLoanAsPaidAsync(string loanId);
-        Task<AdminLoanDto?> GetLoanByIdAsync(string loanId);
-        Task<AdminLoanDto?> UpdateLoanStatusAsync(string loanId, LoanStatus newStatus);
-        Task<bool> DeleteLoanAsync(string loanId);
-
-
-        // PreQualified Management
-        Task<PreQualifiedLoanDto?> CreatePreQualifiedLoanAsync(CreatePreQualifiedLoanDto createPqLoan);
-        Task<List<PreQualifiedLoanDto>> GetAllPreQualifiedLoansAsync(LoanType? loanType, string? preQualifiedId);
-        Task<PreQualifiedLoanDto?> GetPreQualifiedLoanByIdAsync(string preQualifiedId);
-        Task<bool> DeletePreQualifiedLoanAsync(string preQualifiedId);
+        //Task<ContinuationResponse<AdminLoanDto>> GetAllLoansAsync(int pageSize, string? continuationToken, LoanStatus? status = null, string? loanId = null);
+        ////Task<bool> MarkLoanAsPaidAsync(string loanId);
+        //Task<AdminLoanDto?> GetLoanByIdAsync(string loanId);
+        //Task<AdminLoanDto?> UpdateLoanStatusAsync(string loanId, LoanStatus newStatus);
+        //Task<bool> DeleteLoanAsync(string loanId);
 
 
         // History Management
-        Task<bool> DeleteLoanHistoryAsync(string loanHistoryId);
+        //Task<bool> DeleteLoanHistoryAsync(string loanHistoryId);
     }
 }

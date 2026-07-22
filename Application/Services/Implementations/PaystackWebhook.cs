@@ -29,7 +29,7 @@ namespace Application.Services.Implementations
             }
 
             // Get webhook secret from configuration
-            var secret = _configuration["paystack: Webhook"];
+            var secret = _configuration["Paystack:WebhookSecret"];
 
             // Skip signature check if secret not configured
             if (!string.IsNullOrEmpty(secret))

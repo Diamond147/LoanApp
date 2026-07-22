@@ -10,6 +10,8 @@ using Infrastructure.Repositories.Implementations;
 using Infrastructure.Repositories.Repositories;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Microsoft.Identity.Web;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Any;
@@ -36,8 +38,17 @@ var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING"
 
 // Register DbContext for PostgreSQL
 builder.Services.AddDbContext<AppDbContext>(options =>
+{
     options.UseNpgsql(connectionString, b =>
-        b.MigrationsAssembly("Infrastructure")));
+        b.MigrationsAssembly("Infrastructure"));
+
+    // In development enable EF Core SQL logging and sensitive data for diagnostics only
+    if (builder.Environment.IsDevelopment())
+    {
+        options.EnableSensitiveDataLogging();
+        options.LogTo(Console.WriteLine, LogLevel.Information);
+    }
+});
 
 
 builder.Services.AddHttpContextAccessor();
@@ -48,6 +59,8 @@ builder.Services.AddScoped<ILoanRepository, LoanRepository>();
 builder.Services.AddScoped<IAdminRepository, AdminRepository>();
 builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
 builder.Services.AddScoped<IEmailRepository, EmailRepository>();
+builder.Services.AddScoped<IPrequalifiedLoanRepo, PrequalifiedLoanRepo>();
+builder.Services.AddScoped<ILoanHistoryRepository, LoanHistoryRepository>();
 
 // Register services
 builder.Services.AddScoped<IUserService, UserService>();
@@ -58,6 +71,10 @@ builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IPaystackWebhook, PaystackWebhook>();
 builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IPrequalifiedLoanService, PrequalifiedLoanService>();
+builder.Services.AddScoped<ILoanHistoryService, LoanHistoryService>();
+
 
 
 // EXTERNAL SERVICES (Paystack)
@@ -132,6 +149,9 @@ builder.Services.AddSwaggerGen(c =>
 
     // Add the custom enum schema filter
     c.SchemaFilter<EnumSchemaFilter>();
+
+    // Strip "string" defaults from all query parameters globally
+    c.OperationFilter<SwaggerClearQueryParametersFilter>();
 
     //Display enums as strings in Swagger UI
     c.UseInlineDefinitionsForEnums();

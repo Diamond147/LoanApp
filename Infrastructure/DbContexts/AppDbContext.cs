@@ -39,8 +39,8 @@ namespace Infrastructure.DbContexts
                 entity.HasKey(l => l.Id);
                 entity.Property(l => l.Status).HasConversion<string>().IsRequired();
                 entity.Property(l => l.LoanType).HasConversion<string>().IsRequired();
-                entity.Property(l => l.Amount).HasPrecision(18, 2);
-                entity.Property(l => l.ApprovedAmount).HasPrecision(18, 2);
+                entity.Property(l => l.RequestedAmount).HasPrecision(18, 2);
+                //entity.Property(l => l.ApprovedAmount).HasPrecision(18, 2);
 
                 // Foreign key to UserProfile
                 entity.HasOne<UserProfile>()

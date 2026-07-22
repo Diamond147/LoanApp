@@ -78,7 +78,7 @@ namespace Application.Services.Implementations
                 EmailAddress = user.Email,
                 Subject = "Your Loan Application Has Been Approved!",
                 Body = $"Dear {user.FirstName} {user.LastName},<br/><br/>" +
-                       $"Congratulations! Your loan application for ${loan.Amount} has been approved.<br/>" +
+                       $"Congratulations! Your loan application for ${loan.RequestedAmount} has been approved.<br/>" +
                        $"Please log in to your account to view details and next steps.<br/><br/>" +
                        $"Best regards,<br/>" +
                        $"Loan Management Team",
@@ -97,7 +97,7 @@ namespace Application.Services.Implementations
                 EmailAddress = user.Email,
                 Subject = "Your Loan Application Has Been Rejected",
                 Body = $"Dear {user.FirstName} {user.LastName},<br/><br/>" +
-                       $"We regret to inform you that your loan application for ${loan.Amount} has been rejected.<br/>" +
+                       $"We regret to inform you that your loan application for ${loan.RequestedAmount} has been rejected.<br/>" +
                        $"Please log in to your account for more information or to apply again in the future.<br/><br/>" +
                        $"Best regards,<br/>" +
                        $"Loan Management Team",
@@ -116,8 +116,8 @@ namespace Application.Services.Implementations
                 EmailAddress = user.Email,
                 Subject = "Payment Confirmation",
                 Body = $"Dear {user.FirstName} {user.LastName},<br/><br/>" +
-                       $"We have received your payment of ${payment.Amount} for your loan of ${loan.Amount}.<br/>" +
-                       $"Your remaining balance is ${loan.Amount - payment.Amount}.<br/><br/>" +
+                       $"We have received your payment of ${payment.Amount} for your loan of ${loan.RequestedAmount}.<br/>" +
+                       $"Your remaining balance is ${loan.RequestedAmount - payment.Amount}.<br/><br/>" +
                        $"Thank you for your payment!<br/>" +
                        $"Best regards,<br/>" +
                        $"Loan Management Team",
@@ -136,7 +136,7 @@ namespace Application.Services.Implementations
                 EmailAddress = user.Email,
                 Subject = "Payment Failure Notification",
                 Body = $"Dear {user.FirstName} {user.LastName},<br/><br/>" +
-                       $"We were unable to process your payment of ${payment.Amount} for your loan of ${loan.Amount}.<br/>" +
+                       $"We were unable to process your payment of ${payment.Amount} for your loan of ${loan.RequestedAmount}.<br/>" +
                        $"Please log in to your account to update your payment information or try again.<br/><br/>" +
                        $"Best regards,<br/>" +
                        $"Loan Management Team",

@@ -10,9 +10,9 @@ namespace Domain.Entities
         public string LoanId { get; set; } = string.Empty;
         public LoanType LoanType { get; set; }
         public decimal RequestedAmount { get; set; }
-        public decimal? ApprovedAmount { get; set; }
+        //public decimal? ApprovedAmount { get; set; }
         public DateTime RequestedDate { get; set; }
-        public DateTime? ApprovalDate { get; set; }
+        public DateTime? UpdatedDate { get; set; }
         public LoanStatus Status { get; set; }
         public string UserProfileId { get; set; } = string.Empty;
         public Loan? Loan { get; set; }

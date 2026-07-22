@@ -24,6 +24,6 @@ namespace Domain.DTOs.Users.RequestDto
         [Required(ErrorMessage = "Loan tenure is required.")]
         [Range(3, 72, ErrorMessage = "Loan tenure must be between 3 and 72 months.")]
         [DataType(DataType.Text, ErrorMessage = "Invalid loan tenure format.")]
-        public string LoanTenure { get; set; } = string.Empty;
+        public int LoanTenureInMonths { get; set; }
     }
 }

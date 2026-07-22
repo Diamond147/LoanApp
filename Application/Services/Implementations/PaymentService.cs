@@ -15,15 +15,17 @@ namespace Application.Services.Implementations
     public class PaymentService : IPaymentService
     {
         private readonly ILoanRepository _loanRepository;
+        private readonly ILoanHistoryRepository _loanHistoryRepository;
         private readonly IPaymentRepository _paymentRepository;
         private readonly IPaystackClient _paystackClient;
         private readonly IEmailService _emailService;
         private readonly IUserRepository _userRepository;
         private readonly IHttpContextAccessor _httpContextAccessor;
 
-        public PaymentService(ILoanRepository loanRepository, IPaymentRepository paymentRepository, IPaystackClient paystackClient, IEmailService emailService, IUserRepository userRepository, IHttpContextAccessor httpContextAccessor)
+        public PaymentService(ILoanRepository loanRepository, ILoanHistoryRepository loanHistoryRepository, IPaymentRepository paymentRepository, IPaystackClient paystackClient, IEmailService emailService, IUserRepository userRepository, IHttpContextAccessor httpContextAccessor)
         {
             _loanRepository = loanRepository;
+            _loanHistoryRepository = loanHistoryRepository;
             _paymentRepository = paymentRepository;
             _paystackClient = paystackClient;
             _emailService = emailService;
@@ -60,11 +62,11 @@ namespace Application.Services.Implementations
                     throw new NotFoundException("User not found.");
                 }
 
-                // This reference is used to Track payment in our database,Verify payment with Paystack,Match webhook notifications to payments
+                // This reference is used to Track payment in our database;Verify payment with Paystack;Match webhook notifications to payments
                 var paymentReference = $"PAY_{Guid.NewGuid()}";
 
                 //Get payment amount when Admin approves the loan
-                var amountToPay = loan.ApprovedAmount ?? loan.Amount;
+                var amountToPay = loan.RequestedAmount;
 
                 //Create payment record to database
                 var payment = new Payment
@@ -86,7 +88,7 @@ namespace Application.Services.Implementations
                     reference: paymentReference
                 );
 
-                //Extract important fields from the Paystack response (JSON object with nested data structure)
+                // Extract important fields from the Paystack response (JSON object with nested data structure)
                 var responseData = paystackResponse.GetProperty("data");
                 var authorizationUrl = responseData.GetProperty("authorization_url").GetString();
 
@@ -174,7 +176,7 @@ namespace Application.Services.Implementations
                             Console.WriteLine("DEBUG: Loan record updated to Paid.");
 
                             // Check if history already exists for this loan payment
-                            var historyExists = await _loanRepository.historyExists(loan.Id);
+                            var historyExists = await _loanHistoryRepository.historyExists(loan.Id);
 
                             if (!historyExists) // Only create if it doesn't exist
                             {
@@ -183,16 +185,16 @@ namespace Application.Services.Implementations
                                     Id = Guid.NewGuid().ToString(),
                                     LoanId = loan.Id,
                                     LoanType = loan.LoanType,
-                                    RequestedAmount = loan.Amount,
-                                    ApprovedAmount = loan.ApprovedAmount,
+                                    RequestedAmount = loan.RequestedAmount,
+                                    //ApprovedAmount = loan.ApprovedAmount,
                                     RequestedDate = loan.RequestedDate,
-                                    ApprovalDate = loan.ApprovalDate,
+                                    UpdatedDate = loan.UpdatedDate,
                                     Status = LoanStatus.Paid,
                                     UserProfileId = loan.UserProfileId,
                                 };
 
                                 // Save updates to db
-                                await _loanRepository.AddLoanHistoryAsync(loanHistory);
+                                await _loanHistoryRepository.AddLoanHistoryAsync(loanHistory);
                                 Console.WriteLine("DEBUG: History recorded.");
                             }
 

@@ -1,10 +1,12 @@
-﻿using Application.Exceptions;
+﻿using Application.DTOs;
+using Application.Exceptions;
 using Application.Extensions;
 using Application.Services.Interfaces.ExternalServices;
 using Application.Services.Interfaces.Repositories;
 using Application.Services.Interfaces.Services;
 using Azure.Core;
 using BCrypt.Net;
+using Domain.DTOs.Admin;
 using Domain.DTOs.Users.RequestDto;
 using Domain.DTOs.Users.ResponseDto;
 using Domain.Entities;
@@ -26,184 +28,176 @@ namespace Application.Services.Implementations
             _tokenService = tokenService;
         }
 
-        private string HashPassword(string password)
-        {
-            // Generates a cryptographically secure, unique salt automatically and hashes it
-            return BCrypt.Net.BCrypt.HashPassword(password);
-        }
 
-        private bool VerifyPassword(string Password, string PasswordHash)
-        {
-            // Extracts the salt from the stored hash and validates the comparison mathematically
-            if (string.IsNullOrEmpty(PasswordHash)) return false;
-
-            return BCrypt.Net.BCrypt.Verify(Password, PasswordHash);
-        }
-
-
-        public async Task<UserProfileDto> CreateUserProfileAsync(CreateUserProfileDto createUserProfileDto)
+        // All Users Details with their Loans and Loan Histories
+        public async Task<ContinuationResponse<UserProfileDto>> GetAllUsersDetailsAsync(
+            int pageSize, string? continuationToken, string? userId, string? email, string? mobileNumber, string? gender, string? nationality, string? searchTerm)
         {
             try
             {
-                // Validate if user email already exists
-                var existingUser = await _userRepository.GetUserByEmailAsync(createUserProfileDto.Email);
-                if (existingUser != null)
+                if (pageSize < 1 || pageSize > 100)
                 {
-                    throw new InvalidOperationException("A user with this email already exists.");
+                    throw new ValidationException("PageSize must be between 1 and 100.");
                 }
 
-                var isFirstUser = !await _userRepository.AnyAsync();
-
-                // Create new profile
-                var userProfile = new UserProfile
+                // Get users with their loans
+                var (users, nextToken) = await _userRepository.GetAllUsersDetailsAsync(pageSize, continuationToken, userId, email, mobileNumber, gender, nationality, searchTerm);
+                if (!users.Any())
                 {
-                    Id = Guid.NewGuid().ToString(),
-                    FirstName = createUserProfileDto.FirstName,
-                    LastName = createUserProfileDto.LastName,
-                    Email = createUserProfileDto.Email,
-                    PasswordHash = HashPassword(createUserProfileDto.Password),
-                    Role = isFirstUser ? "Admin" : "User", // Automatic promotion for the first account
-                    Gender = createUserProfileDto.Gender,
-                    DateOfBirth = createUserProfileDto.DateOfBirth,
-                    MobileNumber = createUserProfileDto.MobileNumber,
-                    Nationality = createUserProfileDto.Nationality,
-                    SignUpDate = DateTime.UtcNow
-                };
+                    return new ContinuationResponse<UserProfileDto>
+                    {
+                        Data = new List<UserProfileDto>(),
+                        ContinuationToken = null,
+                        HasMore = false
+                    };
+                }
 
-                await _userRepository.AddUserAsync(userProfile);
-                return new UserProfileDto
+                var userDetails = new List<UserProfileDto>();
+
+                foreach (var user in users)
                 {
-                    Id = userProfile.Id,
-                    FirstName = userProfile.FirstName,
-                    LastName = userProfile.LastName,
-                    Email = userProfile.Email,
-                    Gender = userProfile.Gender,
-                    DateOfBirth = userProfile.DateOfBirth,
-                    MobileNumber = userProfile.MobileNumber,
-                    Nationality = userProfile.Nationality,
-                    SignUpDate = DateTime.UtcNow
+                    // Get all histories from all loans for this user
+                    var histories = user.Loans?
+                        .SelectMany(l => l.LoanHistories ?? new List<LoanHistory>())
+                        .ToList() ?? new List<LoanHistory>();
+
+                    var userDetail = new UserProfileDto
+                    {
+                        Id = user.Id,
+                        FirstName = user.FirstName,
+                        LastName = user.LastName,
+                        Email = user.Email,
+                        MobileNumber = user.MobileNumber,
+                        Gender = user.Gender,
+                        DateOfBirth = user.DateOfBirth,
+                        Nationality = user.Nationality,
+                        SignUpDate = user.SignUpDate,
+
+                        // Map loans
+                        Loans = user.Loans?.Select(l => new LoanDto
+                        {
+                            Id = l.Id,
+                            LoanType = l.LoanType,
+                            RequestedAmount = l.RequestedAmount,
+                            //ApprovedAmount = l.ApprovedAmount,
+                            Status = l.Status,
+                            RequestedDate = l.RequestedDate,
+                            UpdatedDate = l.UpdatedDate,
+                            UserProfileId = l.UserProfileId,
+                            //UserName = $"{user.FirstName} {user.LastName}"
+                        })
+                            .OrderByDescending(l => l.RequestedDate)
+                            .ToList() ?? new List<LoanDto>(),
+
+                        // Map loan histories
+                        LoanHistories = (histories ?? Enumerable.Empty<LoanHistory>())
+                        .Select(h => new LoanHistoryDto
+                        {
+                            Id = h.Id,
+                            LoanId = h.LoanId,
+                            LoanType = h.LoanType,
+                            RequestedAmount = h.RequestedAmount,
+                            //ApprovedAmount = h.ApprovedAmount,
+                            RequestedDate = h.RequestedDate,
+                            UpdatedDate = h.UpdatedDate,
+                            Status = h.Status,
+                            UserProfileId = h.UserProfileId,
+                        }).OrderByDescending(h => h.RequestedDate)
+                        .ToList() ?? new List<LoanHistoryDto>(),
+                    };
+                    userDetails.Add(userDetail);
+                }
+                return new ContinuationResponse<UserProfileDto>
+                {
+                    Data = userDetails,
+                    ContinuationToken = nextToken,
+                    HasMore = nextToken != null,
                 };
-            }
-            catch (UnauthorizedAccessException)
-            {
-                throw;
             }
             catch (Exception ex)
             {
-                throw new ExternalServiceUnavailableException("Service is temporarily unavailable. Please try again later.", ex);
+                throw new ExternalServiceUnavailableException(
+                    "Service is temporarily unavailable. Please try again later.",
+                    ex
+                );
             }
         }
 
 
-        public async Task<LoginResponseDto> LoginAsync(LoginRequestDto request)
-        {
-            var user = await _userRepository.GetUserByEmailAsync(request.Email);
-            if (user == null || !VerifyPassword(request.Password, user.PasswordHash))
-                throw new UnauthorizedAccessException("Invalid credentials");
-
-            // Use the token service to mint the JWT string
-            var roles = new[] { user.Role ?? "User" };
-            var token = _tokenService.GenerateAccessToken(user.Id, user.Email, roles);
-
-            var httpContext = _httpContextAccessor.HttpContext
-            ?? throw new InvalidOperationException("HTTP context is unavailable.");
-
-            var cookieOptions = new CookieOptions
-            {
-                HttpOnly = true,
-                Secure = true,
-                SameSite = SameSiteMode.Strict,
-                Expires = DateTimeOffset.UtcNow.AddHours(2)
-            };
-
-            // Inject the token safely into the encrypted cookie jar
-            httpContext.Response.Cookies.Append("X-Access-Token", token, cookieOptions);
-
-            // Return profile data to the frontend without exposing the raw token string
-            return new LoginResponseDto
-            {
-                Email = user.Email,
-                FirstName = user.FirstName,
-                LastName = user.LastName
-            };
-        }
-
-
-        public Task LogoutAsync()
-        {
-            var httpContext = _httpContextAccessor.HttpContext
-                ?? throw new InvalidOperationException("HTTP context is unavailable.");
-
-            // Expire the cookie instantly to force browser deletion
-            httpContext.Response.Cookies.Append("X-Access-Token", "", new CookieOptions
-            {
-                HttpOnly = true,
-                Secure = true,
-                SameSite = SameSiteMode.Strict,
-                Expires = DateTimeOffset.UtcNow.AddDays(-1)
-            });
-
-            return Task.CompletedTask;
-        }
-
-
-
-        // Complete user profile with additional information
-        public async Task<UserProfileDto> CompleteUserProfileAsync(CompleteProfileDto completeProfileDto)
+        // User Management
+        public async Task<ContinuationResponse<UserProfileDto>> GetAllUsersAsync(int pageSize, string? continuationToken, string? userId)
         {
             try
             {
-                var userId = _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    throw new UnauthorizedAccessException("User is not authenticated");
-
-                // Strip all non-digits just in case
-                var digitsOnly = new string(completeProfileDto.MobileNumber.Where(char.IsDigit).ToArray());
-                if (digitsOnly.Length > 11)
+                if (pageSize < 1 || pageSize > 100)
                 {
-                    throw new ValidationException("Mobile number cannot exceed 11 digits.");
+                    throw new ValidationException("Page size must be between 1 and 100.");
                 }
+                var (users, newContinuationToken) = await _userRepository.GetAllUsersAsync(pageSize, continuationToken, userId);
 
-                var existingUser = await _userRepository.GetUserByIdAsync(userId);
-                if (existingUser == null)
+                var userDtos = new List<UserProfileDto>();
+
+                foreach (var user in users)
                 {
-                    throw new NotFoundException("User profile not found. Please sign in first.");
+                    var newUser = await _userRepository.GetUserByIdAsync(user.Id);
+
+                    userDtos.Add(new UserProfileDto
+                    {
+                        Id = user.Id,
+                        FirstName = user.FirstName,
+                        LastName = user.LastName,
+                        Email = user.Email,
+                        Gender = user.Gender,
+                        DateOfBirth = user.DateOfBirth,
+                        MobileNumber = user.MobileNumber,
+                        SignUpDate = user.SignUpDate,
+                        Nationality = user.Nationality,
+                    });
                 }
-
-                // Update optional fields
-                existingUser.Gender = completeProfileDto.Gender;
-                existingUser.DateOfBirth = completeProfileDto.DateOfBirth;
-                existingUser.MobileNumber = completeProfileDto.MobileNumber;
-                existingUser.Nationality = completeProfileDto.Nationality;
-
-                await _userRepository.UpdateUserAsync(existingUser);
-
-                return new UserProfileDto
+                return new ContinuationResponse<UserProfileDto>
                 {
-                    Id = existingUser.Id,
-                    FirstName = existingUser.FirstName,
-                    LastName = existingUser.LastName,
-                    Email = existingUser.Email,
-                    Gender = existingUser.Gender,
-                    DateOfBirth = existingUser.DateOfBirth,
-                    MobileNumber = existingUser.MobileNumber,
-                    Nationality = existingUser.Nationality,
-                    SignUpDate = existingUser.SignUpDate,
+                    Data = userDtos,
+                    ContinuationToken = newContinuationToken,
+                    HasMore = !string.IsNullOrEmpty(newContinuationToken)
                 };
-            }
-            catch (UnauthorizedAccessException)
-            {
-                throw;
-            }
-            catch (NotFoundException)
-            {
-                throw;
             }
             catch (Exception ex)
             {
-                throw new ExternalServiceUnavailableException("Service is temporarily unavailable. Please try again later.", ex);
+                throw new ExternalServiceUnavailableException(
+                    "Service is temporarily unavailable. Please try again later.",
+                    ex
+                );
             }
         }
+
+
+        // Changing user role from "Admin" to "User"
+        public async Task ChangeUserRoleAsync(string UserId, ChangeRoleDto dto)
+        {
+            // Input Validation
+            if (string.IsNullOrEmpty(dto.NewRole))
+            {
+                throw new ArgumentException("Role cannot be empty.");
+            }
+
+            // Normalize role input to ensure case-insensitivity
+            var normalizedRole = char.ToUpper(dto.NewRole[0]) + dto.NewRole.Substring(1).ToLower();
+            if (normalizedRole != "Admin" && normalizedRole != "User")
+            {
+                throw new ArgumentException("Invalid role. Allowed roles are 'Admin' or 'User'.");
+            }
+
+            // Fetch User
+            var user = await _userRepository.GetUserByIdAsync(UserId);
+            if (user == null)
+            {
+                throw new NotFoundException($"User with ID {UserId} not found.");
+            }
+
+            user.Role = normalizedRole;
+            await _userRepository.UpdateUserAsync(user);
+        }
+
 
         public async Task<UserProfileDto?> GetUserByIdAsync(string userId)
         {

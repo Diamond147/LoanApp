@@ -93,7 +93,7 @@ namespace Application.Services.Implementations
                 {
                     Id = l.Id,
                     LoanType = l.LoanType,
-                    RequestedAmount = l.Amount,
+                    RequestedAmount = l.RequestedAmount,
                     Status = l.Status,
                     UserProfileId = l.UserProfileId
                 }).ToList(),
