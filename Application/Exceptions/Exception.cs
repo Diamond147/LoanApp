@@ -17,6 +17,11 @@ namespace Application.Exceptions
         public NotFoundException(string message) : base(message) { }
     }
 
+    public class UnauthorizedException : AppException
+    {
+        public UnauthorizedException(string message) : base(message) { }
+    }
+
     public class ExternalServiceUnavailableException : AppException
     {
         public ExternalServiceUnavailableException(string message, Exception? inner = null)

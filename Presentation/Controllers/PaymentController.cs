@@ -23,7 +23,7 @@ namespace Presentation.Controllers
         }
 
 
-        [Authorize(Roles = "User, Admin")]
+ 
         [HttpPost]
         public async Task<IActionResult> InitiatePayment()
         {
@@ -46,14 +46,41 @@ namespace Presentation.Controllers
         }
 
 
+        [AllowAnonymous]
+        [HttpGet("reference")]
+        public async Task<IActionResult> GetByReference([FromQuery] string reference)
+        {
+            if (string.IsNullOrEmpty(reference))
+            {
+                return BadRequest(new { message = "Payment reference is required." });
+            }
+
+            var result = await _paymentService.GetPaymentByReferenceAsync(reference);
+
+            if (result == null)
+            {
+                return NotFound(new { statusCode = 404, message = "Payment not found." });
+            }
+
+            return Ok(result);
+        }
+
+
         [HttpPost("webhook")]
         [AllowAnonymous]
         public async Task<IActionResult> PaystackWebhook([FromBody] PaystackWebhookDto payload)
         {
+            // Enable stream rewindability in ASP.NET Core
+            Request.EnableBuffering();
+
             // Extract raw body for signature verification
             Request.Body.Position = 0;
             using var reader = new StreamReader(Request.Body, Encoding.UTF8, true, 1024, leaveOpen: true);
             var requestBody = await reader.ReadToEndAsync();
+
+            // Reset stream position again so MVC model binder or down-stream middleware doesn't read empty body
+            Request.Body.Position = 0;
+
             var signature = Request.Headers["x-paystack-signature"].ToString();
 
             // Call External Service

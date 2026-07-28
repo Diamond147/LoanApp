@@ -16,7 +16,7 @@ namespace Domain.DTOs.Users.RequestDto
 
 
         [Required(ErrorMessage = "Maximum amount is required.")]
-        [Range(double.MinValue, 10000000.00, ErrorMessage = "Maximum amount is #10,000,000.")]
+        [Range(double.MinValue, 999999.00, ErrorMessage = "Maximum amount is #999,999.")]
         [DataType(DataType.Currency, ErrorMessage = "Invalid currency format.")]
         public decimal MaxAmount { get; set; }
 

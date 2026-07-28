@@ -8,16 +8,6 @@ namespace Application.Extensions
     {
         public static UserClaimsInfo GetUserInfo(this ClaimsPrincipal user)
         {
-            //// If auth is disabled, return a mock user instead of crashing
-            //if (user?.Identity?.IsAuthenticated != true)
-            //{
-            //    return new UserClaimsInfo
-            //    {
-            //        Email = "testing@example.com",
-            //        UserId = "12345"
-            //    };
-            //}
-
             // Use standard ClaimTypes which map to those long URLs automatically
             var userId = user.FindFirst("oid")?.Value
                          ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;

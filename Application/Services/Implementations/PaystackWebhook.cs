@@ -17,6 +17,8 @@ namespace Application.Services.Implementations
             _configuration = configuration;
             _paymentService=paymentService;
         }
+
+
         public async Task<bool> PaystackWebhookAsync( PaystackWebhookDto payload, string requestBody, string signature)
         {
             Console.WriteLine($"Request body length: {requestBody.Length}");
@@ -31,14 +33,11 @@ namespace Application.Services.Implementations
             // Get webhook secret from configuration
             var secret = _configuration["Paystack:WebhookSecret"];
 
-            // Skip signature check if secret not configured
-            if (!string.IsNullOrEmpty(secret))
+            // FAIL-CLOSED SECURITY: Reject if secret is missing or signature verification fails
+            if (string.IsNullOrEmpty(secret) || !VerifySignature(requestBody, signature, secret))
             {
-                if (!VerifySignature(requestBody, signature, secret))
-                {
-                    Console.WriteLine("INVALID SIGNATURE detected.");
-                    return false;
-                }
+                Console.WriteLine("INVALID OR UNCONFIGURED SIGNATURE DETECTED.");
+                return false;
             }
 
             // Parse and process webhook data
@@ -46,10 +45,10 @@ namespace Application.Services.Implementations
             {
                 if (payload.Event == "charge.success")
                 {
-                    var reference = payload.Data.Reference;
-                    Console.WriteLine($"Processing payment for reference: {reference}");
+                    Console.WriteLine($"Processing payment for reference: {payload.Data.Reference}");
 
-                    var result = await _paymentService.VerifyPaymentAsync(reference);
+                    // Process directly using authenticated payload to avoid redundant network calls
+                    var result = await _paymentService.ProcessSuccessfulWebhookAsync(payload.Data);
                     if (result)
                         Console.WriteLine("Payment processed successfully");
                     else
@@ -72,7 +71,7 @@ namespace Application.Services.Implementations
 
         private bool VerifySignature(string payload, string signature, string secret)
         {
-            if (string.IsNullOrEmpty(secret)) return true; // Skip if no secret
+            if (string.IsNullOrEmpty(secret) || string.IsNullOrEmpty(signature)) return false;
 
             // NOTE: HMAC algorithm works with byte arrays
             var secretBytes = Encoding.UTF8.GetBytes(secret);

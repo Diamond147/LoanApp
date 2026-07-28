@@ -2,13 +2,12 @@
 using Application.Extensions;
 using Application.Services.Interfaces.Repositories;
 using Application.Services.Interfaces.Services;
-using Domain.DTOs.Admin;
 using Domain.DTOs.Users.RequestDto;
 using Domain.DTOs.Users.ResponseDto;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.AspNetCore.Http;
-using System.Net;
+
 
 namespace Application.Services.Implementations
 {
@@ -140,122 +139,18 @@ namespace Application.Services.Implementations
         }
 
 
-        // Loan Management
-        //public async Task<ContinuationResponse<AdminLoanDto>> GetAllLoansAsync(int pageSize, string? continuationToken, LoanStatus? status, string? loanId)
-        //{
-        //    try
-        //    {
-        //        if (pageSize < 1 || pageSize > 100)
-        //        {
-        //            throw new ValidationException("PageSize must be between 1 and 100");
-        //        }
-        //        var (loans, newContinuationToken) = await _loanRepository.GetAllLoansAsync(pageSize, continuationToken, status, loanId);
-
-        //        var loanDtos = new List<AdminLoanDto>();
-
-        //        foreach (var loan in loans)
-        //        {
-        //            var user = await _loanRepository.GetUserByIdAsync(loan.UserProfileId);
-        //            loanDtos.Add(new AdminLoanDto
-        //            {
-        //                Id = loan.Id,
-        //                LoanType = loan.LoanType,
-        //                Amount = loan.Amount,
-        //                ApprovedAmount = loan.ApprovedAmount,
-        //                Status = loan.Status,
-        //                RequestedDate = loan.RequestedDate,
-        //                ApprovalDate = loan.ApprovalDate,
-        //                UserProfileId = loan.UserProfileId,
-        //                UserName = user != null ? $"{user.FirstName} {user.LastName}" : null,
-        //            });
-        //        }
-        //        return new ContinuationResponse<AdminLoanDto>
-        //        {
-        //            Data = loanDtos,
-        //            ContinuationToken = newContinuationToken,
-        //            HasMore = !string.IsNullOrEmpty(newContinuationToken)
-        //        };
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        throw new ExternalServiceUnavailableException(
-        //            "Service is temporarily unavailable. Please try again later.",
-        //            ex
-        //        );
-        //    }
-        //}
-
-
-        //public async Task<bool> MarkLoanAsPaidAsync(string loanId)
-        //{
-        //    var loan = await _adminRepository.GetLoanByIdAsync(loanId);
-        //    if (loan == null)
-        //        return false;
-
-        //    if (loan.Status != LoanStatus.Approved)
-        //        throw new InvalidOperationException("Only approved loans can be marked as paid.");
-
-        //    loan.Status = LoanStatus.Paid;
-        //    loan.UpdatedDate = DateTime.UtcNow;
-
-        //    var history = new LoanHistory
-        //    {
-        //        Id = Guid.NewGuid().ToString(),
-        //        LoanId = loan.Id,
-        //        LoanType = loan.LoanType,
-        //        RequestedAmount = loan.Amount,
-        //        ApprovedAmount = loan.ApprovedAmount,
-        //        RequestedDate = loan.RequestedDate,
-        //        ApprovalDate = loan.ApprovalDate,
-        //        Status = LoanStatus.Paid,
-        //        UserProfileId = loan.UserProfileId,
-        //    };
-        //    await _adminRepository.UpdateLoanStatusAsync(loanId, LoanStatus.Paid);
-        //    await _adminRepository.AddLoanHistoryAsync(history);
-
-        //    return true;
-        //}
-
-        //public async Task<AdminLoanDto?> GetLoanByIdAsync(string loanId)
-        //{
-        //    try
-        //    {
-        //        var loan = await _loanRepository.GetLoanByIdAsync(loanId);
-        //        if (loan == null)
-        //            throw new NotFoundException("Loan not found");
-
-        //        var user = await _loanRepository.GetUserByIdAsync(loan.UserProfileId);
-
-        //        return new AdminLoanDto
-        //        {
-        //            Id = loan.Id,
-        //            LoanType = loan.LoanType,
-        //            Amount = loan.Amount,
-        //            ApprovedAmount = loan.ApprovedAmount,
-        //            Status = loan.Status,
-        //            RequestedDate = loan.RequestedDate,
-        //            ApprovalDate = loan.ApprovalDate,
-        //            UserProfileId = loan.UserProfileId,
-        //            UserName = user != null ? $"{user.FirstName} {user.LastName}" : null,
-        //        };
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        throw new ExternalServiceUnavailableException(
-        //            "Service is temporarily unavailable. Please try again later.",
-        //            ex
-        //        );
-        //    }
-        //}
-
-
-        public async Task<LoanDto?> GetLoanByIdAsync(string loanId)
+        public async Task<LoanDto?> GetLoanByIdAsync(string loanId, string userId)
         {
             try
             {
                 var loan = await _loanRepository.GetLoanByIdAsync(loanId);
                 if (loan == null)
-                    throw new NotFoundException("Loan not found");
+                    throw new NotFoundException("Loan not found.");
+
+                // Ownership Check: Verify the loan belongs to the requesting user
+                if (loan.UserProfileId != userId)
+                    throw new UnauthorizedException("You are not authorized to view this loan.");
+
                 return new LoanDto
                 {
                     Id = loan.Id,
@@ -265,6 +160,14 @@ namespace Application.Services.Implementations
                     Status = loan.Status,
                     UserProfileId = loan.UserProfileId
                 };
+            }
+            catch (NotFoundException)
+            {
+                throw;
+            }
+            catch (UnauthorizedException)
+            {
+                throw;
             }
             catch (ValidationException)
             {
@@ -284,18 +187,47 @@ namespace Application.Services.Implementations
         {
             try
             {
-                var loan = await _loanRepository.UpdateLoanStatusAsync(loanId, newStatus);
+                var loan = await _loanRepository.GetLoanByIdAsync(loanId);
                 if (loan == null)
                 {
-                    throw new NotFoundException("Loan not found");
+                    throw new NotFoundException("Loan not found.");
                 }
+
+                var previousStatus = loan.Status;
+
+                if (previousStatus == newStatus)
+                {
+                    var existingUser = await _userRepository.GetUserByIdAsync(loan.UserProfileId);
+                    return new LoanDto
+                    {
+                        Id = loan.Id,
+                        LoanType = loan.LoanType,
+                        RequestedAmount = loan.RequestedAmount,
+                        Status = loan.Status,
+                        RequestedDate = loan.RequestedDate,
+                        UpdatedDate = loan.UpdatedDate,
+                        UserProfileId = loan.UserProfileId,
+                        //UserName = existingUser != null ? $"{existingUser.FirstName} {existingUser.LastName}" : null
+                    };
+                }
+
+                loan.Status = newStatus;
+                loan.UpdatedDate = DateTime.UtcNow;
+
+                await _loanRepository.UpdateLoanAsync(loan);
+
+                var historyEntry = new LoanHistory
+                {
+                    LoanId = loan.Id,
+                    Status = newStatus,
+                    UpdatedDate = DateTime.UtcNow
+                };
+
+                await _loanHistoryRepository.AddLoanHistoryAsync(historyEntry);
 
                 var user = await _userRepository.GetUserByIdAsync(loan.UserProfileId);
                 if (user != null)
                 {
-                    //#if DEBUG
-                    //    user.Email = "adesolaopeyemi216@gmail.com";
-                    //#endif
                     if (newStatus == LoanStatus.Approved)
                     {
                         await _emailService.SendLoanApprovalEmailAsync(user, loan);
@@ -305,18 +237,26 @@ namespace Application.Services.Implementations
                         await _emailService.SendLoanRejectionEmailAsync(user, loan);
                     }
                 }
+
                 return new LoanDto
                 {
                     Id = loan.Id,
                     LoanType = loan.LoanType,
                     RequestedAmount = loan.RequestedAmount,
-                    //ApprovedAmount = loan.ApprovedAmount,
                     Status = loan.Status,
                     RequestedDate = loan.RequestedDate,
                     UpdatedDate = loan.UpdatedDate,
                     UserProfileId = loan.UserProfileId,
-                    //UserName = user != null ? $"{user.FirstName} {user.LastName}" : null,
+                    //UserName = user != null ? $"{user.FirstName} {user.LastName}" : null
                 };
+            }
+            catch (NotFoundException)
+            {
+                throw;
+            }
+            catch (ValidationException)
+            {
+                throw;
             }
             catch (Exception ex)
             {

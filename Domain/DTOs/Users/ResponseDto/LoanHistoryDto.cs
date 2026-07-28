@@ -6,7 +6,7 @@ namespace Domain.DTOs.Users.ResponseDto
     {
         public string? Id { get; set; }
         public string? LoanId { get; set; }
-        public LoanType LoanType { get; set; }
+        public LoanType? LoanType { get; set; }
         public decimal RequestedAmount { get; set; }
         public DateTime RequestedDate { get; set; }
         public DateTime? UpdatedDate { get; set; }

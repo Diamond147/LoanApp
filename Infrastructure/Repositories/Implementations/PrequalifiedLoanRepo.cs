@@ -54,7 +54,7 @@ namespace Infrastructure.Repositories.Implementations
         }
 
 
-        public async Task<PreQualifiedLoan?> GetPreQualifiedLoanByTypeAsync(LoanType loanType)
+        public async Task<PreQualifiedLoan?> GetPreQualifiedLoanByTypeAsync(LoanType? loanType)
         {
             return await _context.PreQualifiedLoans
                 .Where(p => p.LoanType == loanType)

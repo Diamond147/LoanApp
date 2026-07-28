@@ -39,7 +39,7 @@ namespace Infrastructure.Repositories.Implementations
 
 
         [Authorize(Roles = "Admin")]
-        [HttpDelete("{loanHistoryId}")]
+        [HttpDelete("history/{loanHistoryId}")]
         public async Task<IActionResult> DeleteLoanHistory(string loanHistoryId)
         {
             var result = await _loanHistoryService.DeleteLoanHistoryAsync(loanHistoryId);

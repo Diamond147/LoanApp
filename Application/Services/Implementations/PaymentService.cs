@@ -7,8 +7,8 @@ using Domain.Enums;
 using Application.Services.Interfaces.ExternalServices;
 using Application.Services.Interfaces.Repositories;
 using Microsoft.AspNetCore.Http;
-using System.Net;
 using System.Text.Json;
+
 
 namespace Application.Services.Implementations
 {
@@ -33,7 +33,7 @@ namespace Application.Services.Implementations
             _httpContextAccessor = httpContextAccessor;
         }
 
-        //public async Task<PaymentResponseDto> InitiatePaymentAsync(InitiatePaymentDto initiatePayment)
+        
         public async Task<PaymentResponseDto> InitiatePaymentAsync()
         {
             try
@@ -51,7 +51,7 @@ namespace Application.Services.Implementations
 
                 // check if loan already paid
                 var existingPayments = await _paymentRepository.GetPaymentsByLoanIdAsync(loan.Id);
-                if (existingPayments.Any(p => p.Status == PaymentStatus.Success))
+                if (existingPayments.Any(p => p.Status == PaymentStatus.Successful))
                 {
                     throw new ValidationException("This loan has already been paid.");
                 }
@@ -127,8 +127,10 @@ namespace Application.Services.Implementations
 
 
         // This method is called by the webhook when Paystack confirms a payment.It handles the entire post-payment workflow.
-        public async Task<bool> VerifyPaymentAsync(string reference)
+        public async Task<bool> ProcessSuccessfulWebhookAsync(PaystackWebhookData data)
         {
+            var reference = data.Reference;
+
             var payment = await _paymentRepository.GetPaymentByReferenceAsync(reference);
             if (payment == null)
             {
@@ -137,29 +139,25 @@ namespace Application.Services.Implementations
             }
 
             //IDEMPOTENCY CHECK - Prevent duplicate processing
-            if (payment.Status == PaymentStatus.Success)
+            if (payment.Status == PaymentStatus.Successful)
             {
-                Console.WriteLine("DEBUG: Payment already Success. Exiting to avoid duplicate email.");
+                Console.WriteLine("DEBUG: Payment already Successful. Exiting to avoid duplicate email.");
                 return true;
             }
 
-            try
-            {
-                // Verify payment with Paystack API
-                var verificationResponse = await _paystackClient.VerifyTransactionAsync(reference);
-                using var doc = JsonDocument.Parse(verificationResponse.ToString());
-                var data = doc.RootElement.GetProperty("data");
-                var status = data.GetProperty("status").GetString();
-                var paidAmount = data.GetProperty("amount").GetInt64() / 100m;
-                var verifiedReference = data.GetProperty("reference").GetString();
+            decimal AmountInNaira = data.Amount / 100m;
 
-                //All CHECKS must pass for payment to be accepted
-                if (status == "success" && paidAmount == payment.Amount && verifiedReference == reference)
+            //All CHECKS must pass for payment to be accepted
+            if (data.Status == "success" && AmountInNaira == payment.Amount && data.Reference == reference)
+            {
+                try
                 {
-                    //Update payment status to Success
-                    payment.Status = PaymentStatus.Success;
-                    payment.PaystackResponse = verificationResponse.ToString(); //Store full response for audit
+
+                    //Update payment status to Successful
+                    payment.Status = PaymentStatus.Successful;
+                    payment.PaystackResponse = JsonSerializer.Serialize(data); //Store full response for audit
                     payment.UpdatedDate = DateTime.UtcNow;
+
                     await _paymentRepository.UpdatePaymentAsync(payment);
                     Console.WriteLine("DEBUG: Payment record updated in DB.");
 
@@ -172,6 +170,7 @@ namespace Application.Services.Implementations
                         {
                             loan.Status = LoanStatus.Paid;
                             loan.UpdatedDate = DateTime.UtcNow;
+
                             await _loanRepository.UpdateLoanAsync(loan);
                             Console.WriteLine("DEBUG: Loan record updated to Paid.");
 
@@ -209,7 +208,7 @@ namespace Application.Services.Implementations
                                 }
                                 else
                                 {
-                                    Console.WriteLine("Email not sent: User not found."); 
+                                    Console.WriteLine("Email not sent: User not found.");
                                 }
                             }
                         }
@@ -217,45 +216,21 @@ namespace Application.Services.Implementations
 
                     return true;
                 }
-
-                // Payment verification failed
-                Console.WriteLine($"Payment verification failed for {reference}:");
-                Console.WriteLine($"  Expected status: success, Got: {status}");
-                Console.WriteLine($"  Expected amount: {payment.Amount}, Got: {paidAmount}");
-                Console.WriteLine($"  Expected reference: {reference}, Got: {verifiedReference}");
-
-                //Update payment status to failed
-                payment.Status = PaymentStatus.Failed;
-                payment.PaystackResponse = verificationResponse.ToString();
-                payment.UpdatedDate = DateTime.UtcNow;
-                await _paymentRepository.UpdatePaymentAsync(payment);
-
-                //Get user and loan for failure notification
-                if (!string.IsNullOrEmpty(payment.UserProfileId) && !string.IsNullOrEmpty(payment.LoanId))
+                catch (Exception ex)
                 {
-                    var userFail = await _userRepository.GetUserByIdAsync(payment.UserProfileId);
-
-                    var loanFail = await _loanRepository.GetLoanByIdAsync(payment.LoanId);
-
-                    //send failure email to user
-                    if (userFail != null && loanFail != null)
-                    {
-                        await _emailService.SendPaymentFailureEmailAsync(userFail, loanFail, payment);
-                    }
+                    Console.WriteLine($"Error verifying payment {reference}: {ex.Message}");
+                    return false;
                 }
-                return false;
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error verifying payment {reference}: {ex.Message}");
 
-                // Update payment status to Failed
-                payment.Status = PaymentStatus.Failed;
-                payment.UpdatedDate = DateTime.UtcNow;
-                await _paymentRepository.UpdatePaymentAsync(payment);
+            // Fraud / Validation mismatch
+            Console.WriteLine($"Payment verification failed for {reference}: Amount or status mismatch.");
+            payment.Status = PaymentStatus.Failed;
+            payment.UpdatedDate = DateTime.UtcNow;
 
-                return false;
-            }
+            await _paymentRepository.UpdatePaymentAsync(payment);
+
+            return false;
         }
 
 

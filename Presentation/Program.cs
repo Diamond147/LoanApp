@@ -10,13 +10,9 @@ using Infrastructure.Repositories.Implementations;
 using Infrastructure.Repositories.Repositories;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using Microsoft.Identity.Web;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Any;
 using Microsoft.OpenApi.Models;
-using Npgsql.EntityFrameworkCore.PostgreSQL;
 using Presentation.Filters;
 using Presentation.Middlewares;
 using System.Security.Claims;
@@ -96,8 +92,8 @@ builder.Services.AddScoped<IPaystackClient>(provider =>
     var httpClient = provider.GetRequiredService<HttpClient>();
 
     // Read Paystack secret key from environment variable (for security)
-    var secretKey = Environment.GetEnvironmentVariable("PAYSTACK_SECRET_KEY") ?? "dummy_secret_key";
-        //?? throw new InvalidOperationException("PAYSTACK_SECRET_KEY environment variable is missing");
+    var secretKey = Environment.GetEnvironmentVariable("Paystack__SecretKey")
+        ?? throw new InvalidOperationException("Paystack__SecretKey environment variable is missing");
 
     return new PaystackClient(httpClient, secretKey);
 });
@@ -200,7 +196,7 @@ builder.Services.AddSwaggerGen(c =>
         options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
     })
     .AddJwtBearer(options =>
-    {
+    {   
         // Fetch and decode the Base64 Public Key from configuration
         var publicKeyBase64 = builder.Configuration["Jwt:RsaPublicKey"]?.Trim()
             ?? throw new InvalidOperationException("RSA Public Key is missing");

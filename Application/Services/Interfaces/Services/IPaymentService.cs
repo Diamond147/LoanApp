@@ -9,7 +9,7 @@ namespace Application.Services.Interfaces.Services
         Task<PaymentResponseDto> InitiatePaymentAsync();
 
         // Verifies a payment with Paystack and updates loan status if successful. Called by webhook when Paystack confirms payment.
-        Task<bool> VerifyPaymentAsync(string reference);
+        Task<bool> ProcessSuccessfulWebhookAsync(PaystackWebhookData data);
 
         Task<List<PaymentDto>> GetPaymentsAsync(PaymentStatus? status = null, string? paymentId = null, string? reference = null);
 

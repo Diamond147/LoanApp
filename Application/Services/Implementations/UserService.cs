@@ -1,18 +1,13 @@
 ﻿using Application.DTOs;
 using Application.Exceptions;
-using Application.Extensions;
-using Application.Services.Interfaces.ExternalServices;
 using Application.Services.Interfaces.Repositories;
 using Application.Services.Interfaces.Services;
-using Azure.Core;
-using BCrypt.Net;
-using Domain.DTOs.Admin;
 using Domain.DTOs.Users.RequestDto;
 using Domain.DTOs.Users.ResponseDto;
 using Domain.Entities;
 using Microsoft.AspNetCore.Http;
-using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+
 
 namespace Application.Services.Implementations
 {
@@ -20,12 +15,11 @@ namespace Application.Services.Implementations
     {
         private readonly IUserRepository _userRepository;
         private readonly IHttpContextAccessor _httpContextAccessor;
-        private readonly ITokenService _tokenService;
-        public UserService(IUserRepository userRepository, IHttpContextAccessor httpContextAccessor, ITokenService tokenService)
+
+        public UserService(IUserRepository userRepository, IHttpContextAccessor httpContextAccessor)
         {
             _userRepository = userRepository;
             _httpContextAccessor = httpContextAccessor;
-            _tokenService = tokenService;
         }
 
 
@@ -295,6 +289,7 @@ namespace Application.Services.Implementations
             }
         }
 
+
         public async Task<UserProfileDto> PatchUserAsync(string userId, PatchUserProfileDto patchUser)
         {
             try
@@ -336,6 +331,7 @@ namespace Application.Services.Implementations
                 );
             }
         }
+
 
         public async Task<bool> DeleteUserAsync(string userId)
         {

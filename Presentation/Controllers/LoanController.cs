@@ -4,6 +4,7 @@ using Domain.DTOs.Users.RequestDto;
 using Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Presentation.Controllers
 {
@@ -37,6 +38,23 @@ namespace Presentation.Controllers
         }
 
 
+        [HttpGet("{loanId}")]
+        public async Task<IActionResult> GetLoanById(string loanId)
+        {
+            // Extract the logged-in user's ID from JWT claims
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized();
+
+            var loan = await _loanService.GetLoanByIdAsync(loanId, userId);
+            if (loan == null)
+                return NotFound();
+
+            return Ok(loan);
+        }
+
+
+        [Authorize(Roles = "Admin")]
         [HttpGet]
         public async Task<IActionResult> GetLoans(
             [FromQuery] int pageSize = 10,
@@ -48,17 +66,6 @@ namespace Presentation.Controllers
             return Ok(result);
         }
 
-
-        //[HttpGet("loans")]
-        //public async Task<IActionResult> GetAllLoans(
-        //   [FromQuery] int pageSize = 10,
-        //   [FromQuery] string? continuationToken = null,
-        //   [FromQuery] LoanStatus? status = null,
-        //   [FromQuery] string? loanId = null)
-        //{
-        //    var result = await _loanService.GetAllLoansAsync(pageSize, continuationToken, status, loanId);
-        //    return Ok(result);
-        //}
 
 
         [Authorize(Roles = "Admin")]
