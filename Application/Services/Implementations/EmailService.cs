@@ -69,6 +69,7 @@ namespace Application.Services.Implementations
             return emailSent;
         }
 
+
         public async Task<bool> SendLoanApprovalEmailAsync(UserProfile user, Loan loan)
         {
             // Create email DTO with all necessary information

@@ -70,9 +70,6 @@ namespace Presentation.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> PaystackWebhook([FromBody] PaystackWebhookDto payload)
         {
-            // Enable stream rewindability in ASP.NET Core
-            Request.EnableBuffering();
-
             // Extract raw body for signature verification
             Request.Body.Position = 0;
             using var reader = new StreamReader(Request.Body, Encoding.UTF8, true, 1024, leaveOpen: true);

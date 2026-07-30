@@ -27,7 +27,6 @@ var builder = WebApplication.CreateBuilder(args);
 
 
 // Industry Standard: Pull the fully built string straight from Configuration
-//var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
 var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING")
     ?? builder.Configuration.GetConnectionString("DefaultConnection");
@@ -99,9 +98,25 @@ builder.Services.AddScoped<IPaystackClient>(provider =>
 });
 
 
-// Register a no-op email client for development so DI can resolve IEmailClient.
-// Replace with real email client registration for production (SendGrid, SMTP, or AzureCommunicationService).
-builder.Services.AddSingleton<IEmailClient, NoOpEmailClient>();
+// Register SendGrid Email Client (falls back to NoOp in local dev if key is missing)
+builder.Services.AddScoped<IEmailClient>(provider =>
+{
+    var configuration = provider.GetRequiredService<IConfiguration>();
+
+    var apiKey = Environment.GetEnvironmentVariable("SendGrid__ApiKey")
+    ?? configuration["SendGrid:ApiKey"];
+
+    var senderEmail = Environment.GetEnvironmentVariable("SendGrid__SenderEmail")
+        ?? configuration["SendGrid:SenderEmail"];
+
+    if (string.IsNullOrEmpty(apiKey) || string.IsNullOrEmpty(senderEmail))
+    {
+        Console.WriteLine("SendGrid credentials missing. Falling back to NoOpEmailClient.");
+        return new NoOpEmailClient();
+    }
+
+    return new SendGridEmailClient(apiKey, senderEmail);
+});
 
 
 // Configure Cross-Origin Resource Sharing (CORS).

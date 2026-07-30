@@ -15,6 +15,7 @@ namespace Infrastructure.ExternalServices
             _senderEmail = senderEmail;
         }
 
+
         public async Task<bool> SendEmailAsync(string emailAddress, string subject, string body, bool isHtml = true)
         {
             try
