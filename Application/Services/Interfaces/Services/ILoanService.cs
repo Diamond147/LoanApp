@@ -12,9 +12,5 @@ namespace Application.Services.Interfaces.Services
         Task<LoanDto?> GetLoanByIdAsync(string loanId, string userId);
         Task<LoanDto?> UpdateLoanStatusAsync(string loanId, LoanStatus newStatus);
         Task<bool> DeleteLoanAsync(string loanId);
-
-        //Task<ContinuationResponse<AdminLoanDto>> GetAllLoansAsync(int pageSize, string? continuationToken, LoanStatus? status = null, string? loanId = null);
-        //Task<bool> MarkLoanAsPaidAsync(string loanId);
-        //Task<AdminLoanDto?> GetLoanByIdAsync(string loanId);
     }
 }

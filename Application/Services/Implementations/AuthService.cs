@@ -40,55 +40,44 @@ namespace Application.Services.Implementations
 
         public async Task<UserProfileDto> CreateUserProfileAsync(CreateUserProfileDto createUserProfileDto)
         {
-            try
+            // Validate if user email already exists
+            var existingUser = await _userRepository.GetUserByEmailAsync(createUserProfileDto.Email);
+            if (existingUser != null)
             {
-                // Validate if user email already exists
-                var existingUser = await _userRepository.GetUserByEmailAsync(createUserProfileDto.Email);
-                if (existingUser != null)
-                {
-                    throw new InvalidOperationException("A user with this email already exists.");
-                }
-
-                var isFirstUser = !await _userRepository.AnyAsync();
-
-                // Create new profile
-                var userProfile = new UserProfile
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    FirstName = createUserProfileDto.FirstName,
-                    LastName = createUserProfileDto.LastName,
-                    Email = createUserProfileDto.Email,
-                    PasswordHash = HashPassword(createUserProfileDto.Password),
-                    Role = isFirstUser ? "Admin" : "User", // Automatic promotion for the first account
-                    Gender = createUserProfileDto.Gender,
-                    DateOfBirth = createUserProfileDto.DateOfBirth,
-                    MobileNumber = createUserProfileDto.MobileNumber,
-                    Nationality = createUserProfileDto.Nationality,
-                    SignUpDate = DateTime.UtcNow
-                };
-
-                await _userRepository.AddUserAsync(userProfile);
-                return new UserProfileDto
-                {
-                    Id = userProfile.Id,
-                    FirstName = userProfile.FirstName,
-                    LastName = userProfile.LastName,
-                    Email = userProfile.Email,
-                    Gender = userProfile.Gender,
-                    DateOfBirth = userProfile.DateOfBirth,
-                    MobileNumber = userProfile.MobileNumber,
-                    Nationality = userProfile.Nationality,
-                    SignUpDate = DateTime.UtcNow
-                };
+                throw new ConflictException("A user with this email already exists.");
             }
-            catch (UnauthorizedAccessException)
+
+            var isFirstUser = !await _userRepository.AnyAsync();
+
+            // Create new profile
+            var userProfile = new UserProfile
             {
-                throw;
-            }
-            catch (Exception ex)
+                Id = Guid.NewGuid().ToString(),
+                FirstName = createUserProfileDto.FirstName,
+                LastName = createUserProfileDto.LastName,
+                Email = createUserProfileDto.Email,
+                PasswordHash = HashPassword(createUserProfileDto.Password),
+                Role = isFirstUser ? "Admin" : "User", // Automatic promotion for the first account
+                Gender = createUserProfileDto.Gender,
+                DateOfBirth = createUserProfileDto.DateOfBirth,
+                MobileNumber = createUserProfileDto.MobileNumber,
+                Nationality = createUserProfileDto.Nationality,
+                SignUpDate = DateTime.UtcNow
+            };
+
+            await _userRepository.AddUserAsync(userProfile);
+            return new UserProfileDto
             {
-                throw new ExternalServiceUnavailableException("Service is temporarily unavailable. Please try again later.", ex);
-            }
+                Id = userProfile.Id,
+                FirstName = userProfile.FirstName,
+                LastName = userProfile.LastName,
+                Email = userProfile.Email,
+                Gender = userProfile.Gender,
+                DateOfBirth = userProfile.DateOfBirth,
+                MobileNumber = userProfile.MobileNumber,
+                Nationality = userProfile.Nationality,
+                SignUpDate = DateTime.UtcNow
+            };
         }
 
 
@@ -96,14 +85,14 @@ namespace Application.Services.Implementations
         {
             var user = await _userRepository.GetUserByEmailAsync(request.Email);
             if (user == null || !VerifyPassword(request.Password, user.PasswordHash))
-                throw new UnauthorizedAccessException("Invalid credentials");
+                throw new ValidationException("Invalid credentials");
 
             // Use the token service to mint the JWT string
             var roles = new[] { user.Role ?? "User" };
             var token = _tokenService.GenerateAccessToken(user.Id, user.Email, roles);
 
             var httpContext = _httpContextAccessor.HttpContext
-            ?? throw new InvalidOperationException("HTTP context is unavailable.");
+            ?? throw new ValidationException("HTTP context is unavailable.");
 
             var cookieOptions = new CookieOptions
             {
@@ -129,7 +118,7 @@ namespace Application.Services.Implementations
         public Task LogoutAsync()
         {
             var httpContext = _httpContextAccessor.HttpContext
-                ?? throw new InvalidOperationException("HTTP context is unavailable.");
+                ?? throw new ValidationException("HTTP context is unavailable.");
 
             // Expire the cookie instantly to force browser deletion
             httpContext.Response.Cookies.Append("X-Access-Token", "", new CookieOptions

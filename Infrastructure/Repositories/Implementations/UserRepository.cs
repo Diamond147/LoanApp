@@ -188,6 +188,7 @@ namespace Infrastructure.Repositories.Repositories
             return (users, nextToken);
         }
 
+
         public async Task<int> GetTotalUsersCountAsync()
         {
             return await _context.UserProfiles.CountAsync();
@@ -214,6 +215,7 @@ namespace Infrastructure.Repositories.Repositories
 
             return user;
         }
+
         public async Task<UserProfile?> GetUserByEmailAsync(string email)
         {
             var user = await _context.UserProfiles

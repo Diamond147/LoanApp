@@ -52,21 +52,11 @@ namespace Application.Services.Implementations
 
         public async Task<bool> DeleteLoanHistoryAsync(string loanHistoryId)
         {
-            try
-            {
-                var deleted = await _loanHistoryRepository.DeleteLoanHistoryAsync(loanHistoryId);
-                if (!deleted)
-                    throw new NotFoundException("Loan history not found");
+            var deleted = await _loanHistoryRepository.DeleteLoanHistoryAsync(loanHistoryId);
+            if (!deleted)
+                throw new NotFoundException("Loan history not found");
 
-                return deleted;
-            }
-            catch (Exception ex)
-            {
-                throw new ExternalServiceUnavailableException(
-                    "Service is temporarily unavailable. Please try again later.",
-                    ex
-                );
-            }
+            return deleted;
         }
     }
 }

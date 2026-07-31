@@ -175,40 +175,5 @@ namespace Infrastructure.Repositories.Repositories
         }
 
 
-
-
-        // LoanHistory
-        //public async Task AddLoanHistoryAsync(LoanHistory loanHistory)
-        //{
-        //    _context.LoanHistories.Add(loanHistory);
-        //    await _context.SaveChangesAsync();
-        //}
-
-        //public async Task<bool> historyExists(string loanId)
-        //{
-        //    var history = await _context.LoanHistories
-        //        .Where(h => h.LoanId == loanId && h.Status == LoanStatus.Paid)
-        //        .Select(h => h.Id)
-        //        .FirstOrDefaultAsync();
-
-        //    return history != null;
-        //}
-
-
-
-        //public async Task<List<PreQualifiedLoan>> GetAllPreQualifiedLoansAsync()
-        //{
-        //    return await _context.PreQualifiedLoans
-        //        .OrderByDescending(p => p.LoanType)
-        //        .ToListAsync();
-        //}
-
-        //public async Task<PreQualifiedLoan?> GetPreQualifiedLoanByTypeAsync(LoanType loanType)
-        //{
-        //    return await _context.PreQualifiedLoans
-        //        .Where(p => p.LoanType == loanType)
-        //        .FirstOrDefaultAsync();
-        //}
-
     }
 }

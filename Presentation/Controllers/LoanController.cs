@@ -1,4 +1,4 @@
-﻿using Application.Services.Implementations;
+﻿
 using Application.Services.Interfaces.Services;
 using Domain.DTOs.Users.RequestDto;
 using Domain.Enums;
@@ -19,15 +19,6 @@ namespace Presentation.Controllers
         {
             _loanService = loanService;
         }
-
-
-        //// need to change the routing of this enndpoint...
-        //[HttpGet("prequalifiedloans")]
-        //public async Task<IActionResult> GetAllPrequalifiedLoans()
-        //{
-        //    var loans = await _loanService.GetAllPreQualifiedLoansAsync();
-        //    return Ok(loans);
-        //}
 
 
         [HttpPost]
@@ -75,14 +66,6 @@ namespace Presentation.Controllers
             var result = await _loanService.UpdateLoanStatusAsync(loanId, newStatus);
             return Ok(new { message = $"Loan {newStatus} Successfully", data = result });
         }
-
-
-        //[HttpPut("loans{loanId}/mark-as-paid")]
-        //public async Task<IActionResult> MarkLoanAsPaid(string loanId)
-        //{
-        //        var result = await _adminService.MarkLoanAsPaidAsync(loanId);
-        //        return Ok(new { message = "Loan marked as paid successfully" });
-        //}
 
 
         [Authorize(Roles = "Admin")]

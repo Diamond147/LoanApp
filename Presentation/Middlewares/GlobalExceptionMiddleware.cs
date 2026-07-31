@@ -1,17 +1,16 @@
-﻿namespace Presentation.Middlewares
-{
-    using Application.Exceptions;
-    using System.Net;
-    using System.Text.Json;
+﻿using Application.Exceptions;
+using System.Net;
+using System.Text.Json;
 
+
+namespace Presentation.Middlewares
+{
     public class GlobalExceptionMiddleware
     {
         private readonly RequestDelegate _next;
         private readonly ILogger<GlobalExceptionMiddleware> _logger;
 
-        public GlobalExceptionMiddleware(
-            RequestDelegate next,
-            ILogger<GlobalExceptionMiddleware> logger)
+        public GlobalExceptionMiddleware(RequestDelegate next, ILogger<GlobalExceptionMiddleware> logger)
         {
             _next = next;
             _logger = logger;
@@ -31,13 +30,22 @@
             {
                 await WriteResponse(context, HttpStatusCode.NotFound, ex.Message);
             }
+            catch (ConflictException ex)
+            {
+                await WriteResponse(context, HttpStatusCode.Conflict, ex.Message);
+            }
+            catch (UnauthorizedException ex)
+            {
+                await WriteResponse(context, HttpStatusCode.Unauthorized, ex.Message);
+            }
             catch (ExternalServiceUnavailableException ex)
             {
                 await WriteResponse(context, HttpStatusCode.ServiceUnavailable, ex.Message);
             }
             catch (AppException ex)
             {
-                await WriteResponse(context, HttpStatusCode.BadRequest, ex.Message);
+                // Fallback for any custom business exception that doesn't have a specific HTTP status
+                await WriteResponse(context, HttpStatusCode.UnprocessableEntity, ex.Message);
             }
             catch (Exception ex)
             {
@@ -47,11 +55,7 @@
                 var isDevelopment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development";
                 var errorMessage = isDevelopment ? ex.ToString() : "An unexpected error occurred. Please try again later.";
 
-                await WriteResponse(
-                    context,
-                    HttpStatusCode.InternalServerError,
-                    errorMessage
-                );
+                await WriteResponse(context, HttpStatusCode.InternalServerError, errorMessage);
             }
         }
 

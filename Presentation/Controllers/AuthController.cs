@@ -11,7 +11,6 @@ namespace Presentation.Controllers
     {
         private readonly IAuthService _authService;
 
-
         public AuthController(IAuthService authService)
         {
             _authService = authService;
@@ -34,6 +33,7 @@ namespace Presentation.Controllers
             var result = await _authService.LoginAsync(request);
             return Ok(result);
         }
+
 
         [Authorize(Roles = "User,Admin")]
         [HttpPost("logout")]

@@ -28,7 +28,7 @@ namespace Presentation.Controllers
         }
 
 
-        //[HttpGet("prequalifiedloans")]
+        
         [Authorize(Roles = "User, Admin")]      // For users to know the available prequalifiedloans before creating a loan
         [HttpGet("all")]
         public async Task<IActionResult> GetAllPrequalifiedLoans()

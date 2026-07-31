@@ -1,10 +1,9 @@
 ﻿using Application.DTOs;
-using Application.Services.Implementations;
 using Application.Services.Interfaces.Services;
 using Domain.DTOs.Users.RequestDto;
-using Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+
 
 namespace Presentation.Controllers
 {
@@ -79,22 +78,6 @@ namespace Presentation.Controllers
             var success = await _userService.DeleteUserAsync(userId);
             return NoContent();
         }
-
-
-        //[HttpPut("userprofiles/complete")]
-        //public async Task<IActionResult> CompleteUserProfile([FromBody] CompleteProfileDto dto)
-        //{
-        //    var profile = await _userService.CompleteUserProfileAsync(dto);
-        //    return Ok(profile);
-        //}
-
-
-        //[HttpPut("users/update")]
-        //public async Task<IActionResult> UpdateMyProfile([FromBody] UpdateUserProfileDto dto)
-        //{
-    //        var profile = await _userService.UpdateUserAsync(dto);
-    //        return Ok(profile);
-        //}
 
 
     }

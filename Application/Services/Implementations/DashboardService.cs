@@ -70,6 +70,7 @@ namespace Application.Services.Implementations
             return users.Select(MapToDashboard);
         }
 
+
         //Helper method to map UserProfile to LoanDashboardDto
         private LoanDashboardDto MapToDashboard(UserProfile user)
         {
