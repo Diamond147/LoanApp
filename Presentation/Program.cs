@@ -6,17 +6,22 @@ using DotNetEnv;
 using Infrastructure.DbContexts;
 using Infrastructure.ExternalServices;
 using Infrastructure.ExternalServices.Implementations;
+using Infrastructure.HealthChecks;
 using Infrastructure.Repositories.Implementations;
 using Infrastructure.Repositories.Repositories;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Any;
 using Microsoft.OpenApi.Models;
 using Presentation.Filters;
 using Presentation.Middlewares;
+using StackExchange.Redis;
 using System.Security.Claims;
 using System.Security.Cryptography;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 
@@ -26,8 +31,7 @@ Env.Load();
 var builder = WebApplication.CreateBuilder(args);
 
 
-// Industry Standard: Pull the fully built string straight from Configuration
-
+// Fetch the PostgreSQL connection string from environment variables or appsettings.json
 var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING")
     ?? builder.Configuration.GetConnectionString("DefaultConnection");
 
@@ -44,6 +48,26 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         options.LogTo(Console.WriteLine, LogLevel.Information);
     }
 });
+
+
+// Fetch Redis following the postgresDB exact same fallback pattern
+var redisConnectionString = Environment.GetEnvironmentVariable("REDIS_CONNECTION_STRING")
+    ?? builder.Configuration.GetConnectionString("Redis");
+
+// Register Redis Distributed Cache
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    // The connection string pointing to localhost
+    options.Configuration = redisConnectionString;
+
+    // Optional: Prefixes every key stored in Redis so other apps using Redis don't clash
+    options.InstanceName = "LoanApp_";
+});
+
+// Register IConnectionMultiplexer so RedisCacheService can inject it for key scanning
+builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+    ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("Redis")!));
+
 
 
 builder.Services.AddHttpContextAccessor();
@@ -69,6 +93,7 @@ builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPrequalifiedLoanService, PrequalifiedLoanService>();
 builder.Services.AddScoped<ILoanHistoryService, LoanHistoryService>();
+builder.Services.AddScoped<ICacheService, RedisCacheService>();
 
 
 
@@ -259,16 +284,18 @@ builder.Services.AddSwaggerGen(c =>
 
     builder.Services.AddAuthorization();
 }
-// Add Authorization with policy
-//builder.Services.AddAuthorization(options =>
-//{
-//{
-//    options.AddPolicy("AdminPolicy", policy =>
-//    policy.RequireAssertion(ctx =>
-//        ctx.User.Identity?.Name == "admin@example.com"));
-//});
+
+
+builder.Services.AddHttpClient<PaystackHealthCheck>();
+
+// Register All Health Checks
+builder.Services.AddHealthChecks()
+    .AddCheck("postgres_db", new PostgresHealthCheck(connectionString!), tags: new[] { "ready" })
+    .AddCheck<PaystackHealthCheck>("paystack_api", tags: new[] { "ready" });
+
 
 var app = builder.Build();
+
 
 app.Use(async (context, next) => {
     context.Request.EnableBuffering();
@@ -282,7 +309,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(c =>
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "Loan Application API V1");
-        //c.OAuthClientId(builder.Configuration["SwaggerAzureAd:ClientId"]);  
         c.OAuthUsePkce();
     });
 }
@@ -305,6 +331,53 @@ app.UseAuthentication();
 
 app.UseAuthorization();
 
+
+// Map Health Check Endpoints
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = _ => false // Instant liveness check
+});
+
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready"),
+    ResponseWriter = WriteHealthCheckResponse
+});
+
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    ResponseWriter = WriteHealthCheckResponse
+});
+
+
 app.MapControllers();
 
 app.Run();
+
+
+
+
+// Custom Response Formatter for Detailed JSON Output
+static Task WriteHealthCheckResponse(HttpContext context, HealthReport report)
+{
+    context.Response.ContentType = "application/json";
+
+    var response = new
+    {
+        status = report.Status.ToString(),
+        totalDuration = report.TotalDuration.TotalMilliseconds + " ms",
+        checks = report.Entries.Select(e => new
+        {
+            name = e.Key,
+            status = e.Value.Status.ToString(),
+            duration = e.Value.Duration.TotalMilliseconds + " ms",
+            error = e.Value.Exception?.Message,
+            tags = e.Value.Tags
+        })
+    };
+
+    return context.Response.WriteAsync(JsonSerializer.Serialize(response, new JsonSerializerOptions
+    {
+        WriteIndented = true
+    }));
+}

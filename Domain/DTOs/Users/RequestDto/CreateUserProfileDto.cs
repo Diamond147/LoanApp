@@ -28,7 +28,7 @@ namespace Domain.DTOs.Users.RequestDto
             ErrorMessage = "Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character.")]
         public string Password { get; set; } = string.Empty;
 
-
+        
         [Required(ErrorMessage = "Date of birth is required.")]
         [DataType(DataType.Date, ErrorMessage = "Invalid date format.")]
         public DateOnly DateOfBirth { get; set; }

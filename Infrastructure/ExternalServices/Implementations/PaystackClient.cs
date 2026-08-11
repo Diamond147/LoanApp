@@ -28,6 +28,7 @@ namespace Infrastructure.ExternalServices.Implementations
                 new MediaTypeWithQualityHeaderValue("application/json"));
         }
 
+
         // API Endpoint: POST https://api.paystack.co/transaction/initialize
         public async Task<dynamic> InitializeTransactionAsync(
             string email,

@@ -10,7 +10,7 @@ namespace Presentation.Controllers
 {
     [ApiController]
     [Route("api/v1/loans")]
-    [Authorize(Roles = "User,Admin")]
+    [Authorize]
     public class LoanController : ControllerBase
     {
         private readonly ILoanService _loanService;
@@ -21,6 +21,7 @@ namespace Presentation.Controllers
         }
 
 
+        [Authorize(Roles = "User,Admin")]
         [HttpPost]
         public async Task<IActionResult> CreateLoan([FromBody] CreateLoanDto createLoan)
         {
@@ -29,6 +30,7 @@ namespace Presentation.Controllers
         }
 
 
+        [Authorize(Roles = "User,Admin")]
         [HttpGet("{loanId}")]
         public async Task<IActionResult> GetLoanById(string loanId)
         {
@@ -56,7 +58,6 @@ namespace Presentation.Controllers
             var result = await _loanService.GetAllLoansAsync(pageSize, continuationToken, status, loanId);
             return Ok(result);
         }
-
 
 
         [Authorize(Roles = "Admin")]

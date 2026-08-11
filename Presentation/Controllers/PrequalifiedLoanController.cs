@@ -9,7 +9,7 @@ namespace Presentation.Controllers
 {
     [ApiController]
     [Route("api/v1/prequalifiedloans")]
-    [Authorize(Roles = "Admin")]
+    [Authorize]
     public class PrequalifiedLoanController : ControllerBase
     {
         private readonly IPrequalifiedLoanService _prequalifiedLoanService;
@@ -20,6 +20,7 @@ namespace Presentation.Controllers
         }
 
 
+        [Authorize(Roles = "Admin")]
         [HttpPost]
         public async Task<IActionResult> CreatePreQualifiedLoan([FromBody] CreatePreQualifiedLoanDto createPqLoan)
         {
@@ -29,7 +30,7 @@ namespace Presentation.Controllers
 
 
         
-        [Authorize(Roles = "User, Admin")]      // For users to know the available prequalifiedloans before creating a loan
+        [Authorize(Roles = "User,Admin")]    // For users to know the available prequalifiedloans before creating a loan
         [HttpGet("all")]
         public async Task<IActionResult> GetAllPrequalifiedLoans()
         {
@@ -38,6 +39,7 @@ namespace Presentation.Controllers
         }
 
 
+        [Authorize(Roles = "Admin")]
         [HttpGet]
         public async Task<IActionResult> GetPreQualifiedLoans(
             [FromQuery] string? preQualifiedId = null,
@@ -48,6 +50,7 @@ namespace Presentation.Controllers
         }
 
 
+        [Authorize(Roles = "Admin")]
         [HttpDelete("{preQualifiedId}")]
         public async Task<IActionResult> DeletePreQualifiedLoan(string preQualifiedId)
         {

@@ -1,5 +1,6 @@
 ﻿using Application.Exceptions;
 using Application.Extensions;
+using Application.Services.Interfaces.ExternalServices;
 using Application.Services.Interfaces.Repositories;
 using Application.Services.Interfaces.Services;
 using Domain.DTOs.Users.RequestDto;
@@ -19,9 +20,10 @@ namespace Application.Services.Implementations
         private readonly IEmailService _emailService;
         private readonly ILoanHistoryRepository _loanHistoryRepository;
         private readonly IPrequalifiedLoanRepo _prequalifiedLoanRepo;
+        private readonly ICacheService _cacheService;
 
 
-        public LoanService(ILoanRepository loanRepository, IHttpContextAccessor httpContextAccessor, IUserRepository userRepository, IEmailService emailService, ILoanHistoryRepository loanHistoryRepository, IPrequalifiedLoanRepo prequalifiedLoanRepo)
+        public LoanService(ILoanRepository loanRepository, IHttpContextAccessor httpContextAccessor, IUserRepository userRepository, IEmailService emailService, ILoanHistoryRepository loanHistoryRepository, IPrequalifiedLoanRepo prequalifiedLoanRepo, ICacheService cacheService)
         {
             _loanRepository = loanRepository;
             _httpContextAccessor = httpContextAccessor;
@@ -29,6 +31,7 @@ namespace Application.Services.Implementations
             _emailService = emailService;
             _loanHistoryRepository = loanHistoryRepository;
             _prequalifiedLoanRepo = prequalifiedLoanRepo;
+            _cacheService = cacheService;
         }
 
 
@@ -80,6 +83,13 @@ namespace Application.Services.Implementations
             };
             await _loanHistoryRepository.AddLoanHistoryAsync(loanHistory);
 
+            // Execute ONLY after successful DB saves
+            // Invalidate this specific user's cached loan list so their UI updates immediately
+            await _cacheService.RemoveAsync($"loans:user:{AuthUserId}");
+
+            // Invalidate admin/global cached loan lists so the new loan shows up on admin dashboards
+            await _cacheService.RemoveByPrefixAsync("loans:all:");
+
             return new LoanDto
             {
                 Id = loan.Id,
@@ -92,40 +102,80 @@ namespace Application.Services.Implementations
         }
 
 
-        public async Task<ContinuationResponse<LoanDto>> GetAllLoansAsync(int pageSize, string? continuationToken, LoanStatus? status, string? loanId)
+        public async Task<ContinuationResponse<LoanDto>> GetAllLoansAsync(
+            int pageSize,
+            string? continuationToken,
+            LoanStatus? status,
+            string? loanId)
         {
             if (pageSize < 1 || pageSize > 100)
             {
                 throw new NotFoundException("PageSize must be between 1 and 100");
             }
-            var (loans, newContinuationToken) = await _loanRepository.GetAllLoansAsync(pageSize, continuationToken, status, loanId);
 
-            var loanDtos = new List<LoanDto>();
+            // Build a unique cache key incorporating all filter parameters
+            string cacheKey = $"loans:all:page={pageSize}:token={continuationToken ?? "none"}:status={status?.ToString() ?? "all"}:id={loanId ?? "none"}";
 
-            foreach (var loan in loans)
-            {
-                loanDtos.Add(new LoanDto
+            // Use GetOrSetAsync (Cache-Aside Pattern)
+            Console.WriteLine("Attempting to cache...");
+            var result = await _cacheService.GetOrSetAsync(
+                key: cacheKey,
+                getItemCallback: async () =>
                 {
-                    Id = loan.Id,
-                    LoanType = loan.LoanType,
-                    RequestedAmount = loan.RequestedAmount,
-                    Status = loan.Status,
-                    RequestedDate = loan.RequestedDate,
-                    UserProfileId = loan.UserProfileId,
-                });
-            }
-            return new ContinuationResponse<LoanDto>
-            {
-                Data = loanDtos,
-                ContinuationToken = newContinuationToken,
-                HasMore = !string.IsNullOrEmpty(newContinuationToken)
-            };
+                    // Fetch from Repository on Cache Miss
+                    var (loans, newContinuationToken) = await _loanRepository.GetAllLoansAsync(pageSize, continuationToken, status, loanId);
+
+                    var loanDtos = loans.Select(loan => new LoanDto
+                    {
+                        Id = loan.Id,
+                        LoanType = loan.LoanType,
+                        RequestedAmount = loan.RequestedAmount,
+                        Status = loan.Status,
+                        RequestedDate = loan.RequestedDate,
+                        UserProfileId = loan.UserProfileId,
+                    }).ToList();
+
+                    return new ContinuationResponse<LoanDto>
+                    {
+                        Data = loanDtos,
+                        ContinuationToken = newContinuationToken,
+                        HasMore = !string.IsNullOrEmpty(newContinuationToken)
+                    };
+                },
+                expirationTime: TimeSpan.FromMinutes(15) // Cache list results for 15 minutes
+            );
+            Console.WriteLine("Cache set complete");
+
+            return result ?? new ContinuationResponse<LoanDto>();
         }
 
 
         public async Task<LoanDto?> GetLoanByIdAsync(string loanId, string userId)
         {
-            var loan = await _loanRepository.GetLoanByIdAsync(loanId);
+            string cacheKey = $"loans:id:{loanId}";
+
+            var loan = await _cacheService.GetOrSetAsync(
+                key: cacheKey,
+                getItemCallback: async () =>
+                {
+                    var existingLoan = await _loanRepository.GetLoanByIdAsync(loanId);
+                    if (existingLoan == null)
+                        throw new NotFoundException("Loan not found.");
+
+
+                    return new LoanDto
+                    {
+                        Id = existingLoan.Id,
+                        LoanType = existingLoan.LoanType,
+                        RequestedAmount = existingLoan.RequestedAmount,
+                        RequestedDate = existingLoan.RequestedDate,
+                        Status = existingLoan.Status,
+                        UserProfileId = existingLoan.UserProfileId
+                    };
+                },
+                expirationTime: TimeSpan.FromMinutes(15)
+            );
+
             if (loan == null)
                 throw new NotFoundException("Loan not found.");
 
@@ -133,15 +183,7 @@ namespace Application.Services.Implementations
             if (loan.UserProfileId != userId)
                 throw new UnauthorizedException("You are not authorized to view this loan.");
 
-            return new LoanDto
-            {
-                Id = loan.Id,
-                LoanType = loan.LoanType,
-                RequestedAmount = loan.RequestedAmount,
-                RequestedDate = loan.RequestedDate,
-                Status = loan.Status,
-                UserProfileId = loan.UserProfileId
-            };
+            return loan;
         }
 
 
@@ -189,30 +231,9 @@ namespace Application.Services.Implementations
 
             await _loanHistoryRepository.AddLoanHistoryAsync(historyEntry);
 
-            //var user = await _userRepository.GetUserByIdAsync(loan.UserProfileId);
-            //if (user == null)
-            //{
-            //    Console.WriteLine($"[EMAIL FAILED]: Could not find user with UserProfileId = '{loan.UserProfileId}'");
-            //}
-            //else
-            //{
-            //    Console.WriteLine($"[EMAIL ATTEMPT]: User found ({user.Email}). Target Status: {newStatus}");
-
-            //    if (newStatus == LoanStatus.Approved)
-            //    {
-            //        var sent = await _emailService.SendLoanApprovalEmailAsync(user, loan);
-            //        Console.WriteLine($"📧 [EMAIL RESULT]: Approval email sent result = {sent}");
-            //    }
-            //    else if (newStatus == LoanStatus.Rejected)
-            //    {
-            //        var sent = await _emailService.SendLoanRejectionEmailAsync(user, loan);
-            //        Console.WriteLine($"📧 [EMAIL RESULT]: Rejection email sent result = {sent}");
-            //    }
-            //    else
-            //    {
-            //        Console.WriteLine($"ℹ️ [EMAIL SKIPPED]: Status '{newStatus}' does not trigger an email.");
-            //    }
-            //}
+            await _cacheService.RemoveAsync($"loans:id:{loanId}");
+            await _cacheService.RemoveAsync($"loans:user:{loan.UserProfileId}");
+            await _cacheService.RemoveByPrefixAsync("loans:all:");
 
             var user = await _userRepository.GetUserByIdAsync(loan.UserProfileId);
             if (user != null)
@@ -243,11 +264,20 @@ namespace Application.Services.Implementations
 
         public async Task<bool> DeleteLoanAsync(string loanId)
         {
-            var deleted = await _loanRepository.DeleteLoanAsync(loanId);
-            if (!deleted)
-            {
+            var loan = await _loanRepository.GetLoanByIdAsync(loanId);
+            if (loan == null)
+            { 
                 throw new NotFoundException("Loan not found.");
             }
+
+            var deleted = await _loanRepository.DeleteLoanAsync(loanId);
+            if (deleted)
+            {
+                await _cacheService.RemoveAsync($"loans:id:{loanId}");
+                await _cacheService.RemoveAsync($"loans:user:{loan.UserProfileId}");
+                await _cacheService.RemoveByPrefixAsync("loans:all:");
+            }
+
             return deleted;
         }
 

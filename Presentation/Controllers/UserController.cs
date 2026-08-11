@@ -9,7 +9,7 @@ namespace Presentation.Controllers
 {
     [ApiController]
     [Route("api/v1/users")]
-    [Authorize(Roles = "User,Admin")]
+    [Authorize]
     public class UserController : ControllerBase
     {
         private readonly IUserService _userService;
@@ -56,6 +56,7 @@ namespace Presentation.Controllers
         }
 
 
+        [Authorize(Roles = "User,Admin")]
         [HttpGet("{userId}")]
         public async Task<IActionResult> GetUser(string userId)
         {
@@ -64,12 +65,14 @@ namespace Presentation.Controllers
         }
 
 
+        [Authorize(Roles = "User,Admin")]
         [HttpPatch("{userId}")]
         public async Task<IActionResult> PatchUser(string userId, [FromBody] PatchUserProfileDto PatchUser)
         {
             var result = await _userService.PatchUserAsync(userId, PatchUser);
             return Ok(result);
         }
+
 
         [Authorize(Roles = "Admin")]
         [HttpDelete("{userId}")]

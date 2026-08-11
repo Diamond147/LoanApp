@@ -3,71 +3,128 @@ using Domain.Entities;
 using Application.Exceptions;
 using Domain.DTOs.Users.ResponseDto;
 using Application.Services.Interfaces.Repositories;
+using Application.Services.Interfaces.ExternalServices;
 
 namespace Application.Services.Implementations
 {
     public class DashboardService : IDashboardService
     {
         private readonly IUserRepository _userRepository;
+        private readonly ICacheService _cacheService;
 
-        public DashboardService(IUserRepository userRepository)
+        public DashboardService(IUserRepository userRepository, ICacheService cacheService)
         {
-            _userRepository=userRepository;
+            _userRepository = userRepository;
+            _cacheService = cacheService;
         }
+
+
         public async Task<LoanDashboardDto> GetDashboardByIdAsync(string userId)
         {
-            var user = await _userRepository.GetUserByIdAsync(userId);
-            if (user == null)
-            {
-                throw new NotFoundException($"User with ID '{userId}' not found");
-            }
-            return MapToDashboard(user);
+            string cacheKey = $"dashboard:id:{userId}";
+            var dashboard = await _cacheService.GetOrSetAsync(
+                key: cacheKey,
+                getItemCallback: async () =>
+                {
+                    var user = await _userRepository.GetUserByIdAsync(userId);
+                    if (user == null)
+                        throw new NotFoundException($"User with ID '{userId}' not found");
+                    return MapToDashboard(user);
+                },
+                expirationTime: TimeSpan.FromMinutes(5)
+            );
+
+            return dashboard!;
         }
+
         public async Task<LoanDashboardDto> GetDashboardByEmailAsync(string email)
         {
-            var user = await _userRepository.GetUserByEmailAsync(email);
-            if (user == null)
-            {
-                throw new NotFoundException($"User with Email '{email}' not found");
-            }
-            return MapToDashboard(user);
+            string cacheKey = $"dashboard:email:{email}";
+            var dashboard = await _cacheService.GetOrSetAsync(
+                key: cacheKey,
+                getItemCallback: async () =>
+                {
+                    var user = await _userRepository.GetUserByEmailAsync(email);
+                    if (user == null)
+                        throw new NotFoundException($"User with Email '{email}' not found");
+                    return MapToDashboard(user);
+                },
+                expirationTime: TimeSpan.FromMinutes(5)
+            );
+
+            return dashboard!;
         }
+
         public async Task<LoanDashboardDto> GetDashboardByMobileAsync(string mobileNumber)
         {
-            var user = await _userRepository.GetUserByMobileAsync(mobileNumber);
-            if (user == null)
-            {
-                throw new NotFoundException($"User with Mobile Number '{mobileNumber}' not found");
-            }
-            return MapToDashboard(user);
+            string cacheKey = $"dashboard:mobile:{mobileNumber}";
+            var dashboard = await _cacheService.GetOrSetAsync(
+                key: cacheKey,
+                getItemCallback: async () =>
+                {
+                    var user = await _userRepository.GetUserByMobileAsync(mobileNumber);
+                    if (user == null)
+                        throw new NotFoundException($"User with Mobile Number '{mobileNumber}' not found");
+                    return MapToDashboard(user);
+                },
+                expirationTime: TimeSpan.FromMinutes(5)
+            );
+
+            return dashboard!;
         }
+
         public async Task<LoanDashboardDto> SearchDashboardAsync(string searchTerm)
         {
-            var user = await _userRepository.SearchUserAsync(searchTerm);
-            if (user == null)
-            {
-                throw new NotFoundException($"No user found matching '{searchTerm}'");
-            }
-            return MapToDashboard(user);
+            string cacheKey = $"dashboard:search:{searchTerm}";
+            var dashboard = await _cacheService.GetOrSetAsync(
+                key: cacheKey,
+                getItemCallback: async () =>
+                {
+                    var user = await _userRepository.SearchUserAsync(searchTerm);
+                    if (user == null)
+                        throw new NotFoundException($"No user found matching '{searchTerm}'");
+                    return MapToDashboard(user);
+                },
+                expirationTime: TimeSpan.FromMinutes(5)
+            );
+
+            return dashboard!;
         }
 
         public async Task<IEnumerable<LoanDashboardDto>> GetDashboardsByGenderAsync(string gender)
         {
-            var users = await _userRepository.GetUsersByGenderAsync(gender);
-            if (!users.Any())
-            {
-                throw new NotFoundException($"No user found matching '{gender}'");
-            }
-            return users.Select(MapToDashboard);
+            string cacheKey = $"dashboard:gender:{gender}";
+            var list = await _cacheService.GetOrSetAsync(
+                key: cacheKey,
+                getItemCallback: async () =>
+                {
+                    var users = await _userRepository.GetUsersByGenderAsync(gender);
+                    if (!users.Any())
+                        throw new NotFoundException($"No user found matching '{gender}'");
+                    return users.Select(MapToDashboard).ToList();
+                },
+                expirationTime: TimeSpan.FromMinutes(5)
+            );
+
+            return list ?? Enumerable.Empty<LoanDashboardDto>();
         }
+
         public async Task<IEnumerable<LoanDashboardDto>> GetDashboardsByNationalityAsync(string nationality)
         {
-            var users = await _userRepository.GetUsersByNationalityAsync(nationality);
-            if (!users.Any())
-            {
-                throw new NotFoundException($"No user found matching '{nationality}'");
-            }
-            return users.Select(MapToDashboard);
+            string cacheKey = $"dashboard:nationality:{nationality}";
+            var list = await _cacheService.GetOrSetAsync(
+                key: cacheKey,
+                getItemCallback: async () =>
+                {
+                    var users = await _userRepository.GetUsersByNationalityAsync(nationality);
+                    if (!users.Any())
+                        throw new NotFoundException($"No user found matching '{nationality}'");
+                    return users.Select(MapToDashboard).ToList();
+                },
+                expirationTime: TimeSpan.FromMinutes(5)
+            );
+
+            return list ?? Enumerable.Empty<LoanDashboardDto>();
         }
 
 
@@ -76,7 +133,7 @@ namespace Application.Services.Implementations
         {
             return new LoanDashboardDto
             {
-                User = new UserProfileDto //Maps UserProfile properties to DTO 
+                User = new UserProfileDto   //Maps UserProfile properties to DTO 
                 {
                     Id = user.Id,
                     FirstName = user.FirstName,

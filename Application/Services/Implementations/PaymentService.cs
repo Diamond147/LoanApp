@@ -21,8 +21,9 @@ namespace Application.Services.Implementations
         private readonly IEmailService _emailService;
         private readonly IUserRepository _userRepository;
         private readonly IHttpContextAccessor _httpContextAccessor;
+        private readonly ICacheService _cacheService;
 
-        public PaymentService(ILoanRepository loanRepository, ILoanHistoryRepository loanHistoryRepository, IPaymentRepository paymentRepository, IPaystackClient paystackClient, IEmailService emailService, IUserRepository userRepository, IHttpContextAccessor httpContextAccessor)
+        public PaymentService(ILoanRepository loanRepository, ILoanHistoryRepository loanHistoryRepository, IPaymentRepository paymentRepository, IPaystackClient paystackClient, IEmailService emailService, IUserRepository userRepository, IHttpContextAccessor httpContextAccessor, ICacheService cacheService)
         {
             _loanRepository = loanRepository;
             _loanHistoryRepository = loanHistoryRepository;
@@ -31,6 +32,7 @@ namespace Application.Services.Implementations
             _emailService = emailService;
             _userRepository = userRepository;
             _httpContextAccessor = httpContextAccessor;
+            _cacheService = cacheService;
         }
 
         
@@ -51,7 +53,7 @@ namespace Application.Services.Implementations
 
                 // check if loan already paid
                 var existingPayments = await _paymentRepository.GetPaymentsByLoanIdAsync(loan.Id);
-                if (existingPayments.Any(p => p.Status == PaymentStatus.Successful))
+                if (existingPayments.Any(p => p.Status == PaymentStatus.Success))
                 {
                     throw new ValidationException("This loan has already been paid.");
                 }
@@ -99,6 +101,14 @@ namespace Application.Services.Implementations
 
                 await _paymentRepository.UpdatePaymentAsync(payment);
 
+                // Invalidate related caches so fresh data is returned
+                await _cacheService.RemoveAsync($"payments:id:{payment.Id}");
+                await _cacheService.RemoveAsync($"payments:ref:{payment.PaystackReference}");
+                await _cacheService.RemoveByPrefixAsync("payments:");
+                //await _cacheService.RemoveAsync($"loans:id:{loan.Id}");
+                //await _cacheService.RemoveAsync($"loans:user:{loan.UserProfileId}");
+                //await _cacheService.RemoveByPrefixAsync("loans:all:");
+
                 return new PaymentResponseDto
                 {
                     AuthorizationUrl = authorizationUrl ?? string.Empty,
@@ -139,7 +149,7 @@ namespace Application.Services.Implementations
             }
 
             //IDEMPOTENCY CHECK - Prevent duplicate processing
-            if (payment.Status == PaymentStatus.Successful)
+            if (payment.Status == PaymentStatus.Success)
             {
                 Console.WriteLine("DEBUG: Payment already Successful. Exiting to avoid duplicate email.");
                 return true;
@@ -154,12 +164,18 @@ namespace Application.Services.Implementations
                 {
 
                     //Update payment status to Successful
-                    payment.Status = PaymentStatus.Successful;
+                    payment.Status = PaymentStatus.Success;
                     payment.PaystackResponse = JsonSerializer.Serialize(data); //Store full response for audit
                     payment.UpdatedDate = DateTime.UtcNow;
 
                     await _paymentRepository.UpdatePaymentAsync(payment);
                     Console.WriteLine("DEBUG: Payment record updated in DB.");
+
+                    // Invalidate payment caches
+                    await _cacheService.RemoveAsync($"payments:id:{payment.Id}");
+                    if (!string.IsNullOrEmpty(payment.PaystackReference))
+                        await _cacheService.RemoveAsync($"payments:ref:{payment.PaystackReference}");
+                    await _cacheService.RemoveByPrefixAsync("payments:");
 
                     //Update loan status to Paid
                     if (payment.LoanId != null)
@@ -173,6 +189,11 @@ namespace Application.Services.Implementations
 
                             await _loanRepository.UpdateLoanAsync(loan);
                             Console.WriteLine("DEBUG: Loan record updated to Paid.");
+
+                            // Invalidate loan caches
+                            await _cacheService.RemoveAsync($"loans:id:{loan.Id}");
+                            await _cacheService.RemoveAsync($"loans:user:{loan.UserProfileId}");
+                            await _cacheService.RemoveByPrefixAsync("loans:all:");
 
                             // Check if history already exists for this loan payment
                             var historyExists = await _loanHistoryRepository.historyExists(loan.Id);
@@ -236,50 +257,81 @@ namespace Application.Services.Implementations
 
         public async Task<List<PaymentDto>> GetPaymentsAsync(PaymentStatus? status, string? paymentId, string? reference)
         {
-            var payments = await _paymentRepository.GetPaymentsAsync(status, paymentId, reference);
+            string cacheKey = $"payments:filter:status={(status?.ToString()??"all")}:id={paymentId ?? "none"}:ref={reference ?? "none"}";
 
-            // Map to DTOs manually
-            return payments.Select(p => new PaymentDto
-            {
-                Id = p.Id,
-                LoanId = p.LoanId,
-                UserProfileId = p.UserProfileId,
-                Amount = p.Amount,
-                Status = p.Status,
-                CreatedDate = p.CreatedDate,
-            }).ToList();
+            var list = await _cacheService.GetOrSetAsync(
+                key: cacheKey,
+                getItemCallback: async () =>
+                {
+                    var payments = await _paymentRepository.GetPaymentsAsync(status, paymentId, reference);
+                    return payments.Select(p => new PaymentDto
+                    {
+                        Id = p.Id,
+                        LoanId = p.LoanId,
+                        UserProfileId = p.UserProfileId,
+                        Amount = p.Amount,
+                        Status = p.Status,
+                        CreatedDate = p.CreatedDate,
+                    }).ToList();
+                },
+                expirationTime: TimeSpan.FromMinutes(10)
+            );
+
+            return list ?? new List<PaymentDto>();
         }
 
         public async Task<PaymentDto?> GetPaymentByIdAsync(string paymentId)
         {
-            var payment = await _paymentRepository.GetPaymentByIdAsync(paymentId);
-            if (payment == null)
-                throw new NotFoundException("Payment not found.");
-            return new PaymentDto
-            {
-                Id = payment.Id,
-                LoanId = payment.LoanId,
-                UserProfileId = payment.UserProfileId,
-                Amount = payment.Amount,
-                Status = payment.Status,
-                CreatedDate = payment.CreatedDate,
-            };
+            string cacheKey = $"payments:id:{paymentId}";
+
+            var dto = await _cacheService.GetOrSetAsync(
+                key: cacheKey,
+                getItemCallback: async () =>
+                {
+                    var payment = await _paymentRepository.GetPaymentByIdAsync(paymentId);
+                    if (payment == null)
+                        throw new NotFoundException("Payment not found.");
+                    return new PaymentDto
+                    {
+                        Id = payment.Id,
+                        LoanId = payment.LoanId,
+                        UserProfileId = payment.UserProfileId,
+                        Amount = payment.Amount,
+                        Status = payment.Status,
+                        CreatedDate = payment.CreatedDate,
+                    };
+                },
+                expirationTime: TimeSpan.FromMinutes(10)
+            );
+
+            return dto;
         }
 
         public async Task<PaymentDto?> GetPaymentByReferenceAsync(string reference)
         {
-            var payment = await _paymentRepository.GetPaymentByReferenceAsync(reference);
-            if (payment == null)
-                throw new NotFoundException("Payment not found.");
-            return new PaymentDto
-            {
-                Id = payment.Id,
-                LoanId = payment.LoanId,
-                UserProfileId = payment.UserProfileId,
-                Amount = payment.Amount,
-                Status = payment.Status,
-                CreatedDate = payment.CreatedDate,
-            };
+            string cacheKey = $"payments:ref:{reference}";
+
+            var dto = await _cacheService.GetOrSetAsync(
+                key: cacheKey,
+                getItemCallback: async () =>
+                {
+                    var payment = await _paymentRepository.GetPaymentByReferenceAsync(reference);
+                    if (payment == null)
+                        throw new NotFoundException("Payment not found.");
+                    return new PaymentDto
+                    {
+                        Id = payment.Id,
+                        LoanId = payment.LoanId,
+                        UserProfileId = payment.UserProfileId,
+                        Amount = payment.Amount,
+                        Status = payment.Status,
+                        CreatedDate = payment.CreatedDate,
+                    };
+                },
+                expirationTime: TimeSpan.FromMinutes(10)
+            );
+
+            return dto;
         }
     }
 }

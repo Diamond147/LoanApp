@@ -1,4 +1,5 @@
-﻿using Application.Services.Interfaces.ExternalServices;
+﻿using Application.Exceptions;
+using Application.Services.Interfaces.ExternalServices;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
@@ -23,20 +24,20 @@ namespace Infrastructure.ExternalServices.Implementations
             var audience = _configuration["Jwt:Audience"];
             var durationMinutes = double.Parse(_configuration["Jwt:DurationInMinutes"] ?? "15");
             var privateKeyBase64 = _configuration["Jwt:RsaPrivateKey"]?.Trim()
-                ?? throw new InvalidOperationException("RSA Private key is missing from config.");
+                ?? throw new ValidationException("RSA Private key is missing from config.");
 
             var rsa = RSA.Create();
+
             // The standard reader will now parse the long key perfectly!
             rsa.ImportRSAPrivateKey(Convert.FromBase64String(privateKeyBase64), out _);
 
-
             // Define the Identity claims inside the payload
             var claims = new List<Claim>
-        {
-            new Claim(JwtRegisteredClaimNames.Sub, userId),
-            new Claim(JwtRegisteredClaimNames.Email, email),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
-        };
+            {
+                new Claim(JwtRegisteredClaimNames.Sub, userId),
+                new Claim(JwtRegisteredClaimNames.Email, email),
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            };
 
             // Add application authorization roles dynamically
             foreach (var role in roles)

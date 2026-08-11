@@ -8,7 +8,7 @@ namespace Presentation.Controllers
 {
     [ApiController]
     [Route("api/v1/admin")]
-    [Authorize(Roles = "Admin")]
+    [Authorize]
     public class AdminController : ControllerBase
     {
         private readonly IAdminService _adminService;
@@ -19,7 +19,7 @@ namespace Presentation.Controllers
         }
 
 
-
+        [Authorize(Roles = "Admin")]
         [HttpGet("dashboardstats")]
         public async Task<IActionResult> GetDashboardStats()
         {

@@ -7,7 +7,7 @@ namespace Infrastructure.Repositories.Implementations
 {
     [ApiController]
     [Route("api/v1/loans")]
-    [Authorize(Roles = "User,Admin")]
+    [Authorize]
     public class LoanHistoryController : ControllerBase
     {
         private readonly ILoanHistoryService _loanHistoryService;
@@ -18,6 +18,8 @@ namespace Infrastructure.Repositories.Implementations
         }
 
 
+
+        [Authorize(Roles = "User,Admin")]
         [HttpGet("{loanId}/history")]
         public async Task<IActionResult> GetLoanHistoryByLoanId(string loanId)
         {
@@ -26,6 +28,7 @@ namespace Infrastructure.Repositories.Implementations
         }
 
 
+        [Authorize(Roles = "User,Admin")]
         [HttpGet("history/{historyId}")]
         public async Task<IActionResult> GetLoanHistoryByHistoryId(string historyId)
         {

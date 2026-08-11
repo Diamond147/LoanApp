@@ -9,7 +9,7 @@ namespace Presentation.Controllers
 {
     [ApiController]
     [Route("api/v1/payments")]
-    [Authorize(Roles = "User,Admin")]
+    [Authorize]
     public class PaymentController : ControllerBase
     {
         private readonly IPaymentService _paymentService;
@@ -23,7 +23,7 @@ namespace Presentation.Controllers
         }
 
 
- 
+        [Authorize(Roles = "User,Admin")]
         [HttpPost]
         public async Task<IActionResult> InitiatePayment()
         {
@@ -66,8 +66,8 @@ namespace Presentation.Controllers
         }
 
 
-        [HttpPost("webhook")]
         [AllowAnonymous]
+        [HttpPost("webhook")]
         public async Task<IActionResult> PaystackWebhook([FromBody] PaystackWebhookDto payload)
         {
             // Extract raw body for signature verification

@@ -59,10 +59,7 @@ namespace Presentation.Middlewares
             }
         }
 
-        private static Task WriteResponse(
-            HttpContext context,
-            HttpStatusCode statusCode,
-            string message)
+        private static Task WriteResponse(HttpContext context, HttpStatusCode statusCode, string message)
         {
             context.Response.StatusCode = (int)statusCode;
             context.Response.ContentType = "application/json";
