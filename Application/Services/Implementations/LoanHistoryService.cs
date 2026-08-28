@@ -3,6 +3,7 @@ using Application.Services.Interfaces.Repositories;
 using Application.Services.Interfaces.Services;
 using Domain.DTOs.Users.ResponseDto;
 using Application.Services.Interfaces.ExternalServices;
+using AutoMapper;
 
 
 namespace Application.Services.Implementations
@@ -11,11 +12,13 @@ namespace Application.Services.Implementations
     {
         private readonly ILoanHistoryRepository _loanHistoryRepository;
         private readonly ICacheService _cacheService;
+        private readonly IMapper _mapper;
 
-        public LoanHistoryService(ILoanHistoryRepository lonHistoryRepository, ICacheService cacheService)
+        public LoanHistoryService(ILoanHistoryRepository lonHistoryRepository, ICacheService cacheService, IMapper mapper)
         {
             _loanHistoryRepository = lonHistoryRepository;
             _cacheService = cacheService;
+            _mapper = mapper;
         }
 
 
@@ -28,22 +31,15 @@ namespace Application.Services.Implementations
                 getItemCallback: async () =>
                 {
                     var histories = await _loanHistoryRepository.GetLoanHistoryByLoanIdAsync(loanId);
-                    return histories.Select(h => new LoanHistoryDto
-                    {
-                        Id = h.Id,
-                        LoanId = h.LoanId,
-                        LoanType = h.LoanType,
-                        Status = h.Status,
-                        RequestedAmount = h.RequestedAmount,
-                        RequestedDate = h.RequestedDate,
-                        UserProfileId = h.UserProfileId,
-                    }).ToList();
+
+                    return histories.Select(h => _mapper.Map<LoanHistoryDto>(h)).ToList();
                 },
                 expirationTime: TimeSpan.FromMinutes(15)
             );
 
             return list ?? Enumerable.Empty<LoanHistoryDto>();
         }
+
 
         public async Task<LoanHistoryDto?> GetLoanHistoryByHistoryIdAsync(string historyId)
         {
@@ -56,16 +52,7 @@ namespace Application.Services.Implementations
                     var history = await _loanHistoryRepository.GetLoanHistoryByHistoryIdAsync(historyId);
                     if (history == null) return null;
 
-                    return new LoanHistoryDto
-                    {
-                        Id = history.Id,
-                        LoanId = history.LoanId,
-                        LoanType = history.LoanType,
-                        Status = history.Status,
-                        RequestedAmount = history.RequestedAmount,
-                        RequestedDate = history.RequestedDate,
-                        UserProfileId = history.UserProfileId,
-                    };
+                    return _mapper.Map<LoanHistoryDto>(history);
                 },
                 expirationTime: TimeSpan.FromMinutes(15)
             );

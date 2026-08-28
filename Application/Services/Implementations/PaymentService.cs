@@ -1,11 +1,13 @@
 ﻿using Application.Exceptions;
 using Application.Extensions;
+using Application.Services.Interfaces.ExternalServices;
+using Application.Services.Interfaces.Repositories;
 using Application.Services.Interfaces.Services;
+using AutoMapper;
 using Domain.DTOs.Payments;
 using Domain.Entities;
 using Domain.Enums;
-using Application.Services.Interfaces.ExternalServices;
-using Application.Services.Interfaces.Repositories;
+using Domain.Helpers;
 using Microsoft.AspNetCore.Http;
 using System.Text.Json;
 
@@ -22,8 +24,9 @@ namespace Application.Services.Implementations
         private readonly IUserRepository _userRepository;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly ICacheService _cacheService;
+        private readonly IMapper _mapper;
 
-        public PaymentService(ILoanRepository loanRepository, ILoanHistoryRepository loanHistoryRepository, IPaymentRepository paymentRepository, IPaystackClient paystackClient, IEmailService emailService, IUserRepository userRepository, IHttpContextAccessor httpContextAccessor, ICacheService cacheService)
+        public PaymentService(ILoanRepository loanRepository, ILoanHistoryRepository loanHistoryRepository, IPaymentRepository paymentRepository, IPaystackClient paystackClient, IEmailService emailService, IUserRepository userRepository, IHttpContextAccessor httpContextAccessor, ICacheService cacheService, IMapper mapper)
         {
             _loanRepository = loanRepository;
             _loanHistoryRepository = loanHistoryRepository;
@@ -33,6 +36,7 @@ namespace Application.Services.Implementations
             _userRepository = userRepository;
             _httpContextAccessor = httpContextAccessor;
             _cacheService = cacheService;
+            _mapper = mapper;
         }
 
         
@@ -44,6 +48,12 @@ namespace Application.Services.Implementations
                 if (UserInfo == null)
                     throw new UnauthorizedAccessException("User is not authenticated");
 
+                var user = await _userRepository.GetUserByIdAsync(UserInfo.UserId);
+                if (user == null)
+                {
+                    throw new NotFoundException("User not found.");
+                }
+
                 // Get user's approved loan
                 var loan = await _loanRepository.GetApprovedLoanByUserIdAsync(UserInfo.UserId);
                 if (loan == null)
@@ -51,24 +61,25 @@ namespace Application.Services.Implementations
                     throw new NotFoundException("No approved loan found.");
                 }
 
-                // check if loan already paid
+                // Check if loan already paid OR has pending payment
                 var existingPayments = await _paymentRepository.GetPaymentsByLoanIdAsync(loan.Id);
+
                 if (existingPayments.Any(p => p.Status == PaymentStatus.Success))
                 {
                     throw new ValidationException("This loan has already been paid.");
                 }
 
-                var user = await _userRepository.GetUserByIdAsync(UserInfo.UserId);
-                if (user == null)
-                {
-                    throw new NotFoundException("User not found.");
-                }
+                var pendingPayment = existingPayments.FirstOrDefault(p => p.Status == PaymentStatus.Pending);
+                if (pendingPayment != null)
+                    return _mapper.Map<PaymentResponseDto>(pendingPayment); // return the existing one instead of creating new
+
 
                 // This reference is used to Track payment in our database;Verify payment with Paystack;Match webhook notifications to payments
                 var paymentReference = $"PAY_{Guid.NewGuid()}";
 
-                //Get payment amount when Admin approves the loan
-                var amountToPay = loan.RequestedAmount;
+                // reflects what's actually still owed right now
+                var (projectedAccrued, _) = LoanInterestCalculator.CalculateProjectedAccrual(loan, DateTime.UtcNow);
+                var amountToPay = loan.PrincipalBalance + projectedAccrued;
 
                 //Create payment record to database
                 var payment = new Payment
@@ -129,6 +140,11 @@ namespace Application.Services.Implementations
             {
                 throw;
             }
+            //catch (Exception ex)
+            //{
+            //    // Temporarily log the real error
+            //    throw new ExternalServiceUnavailableException(ex.Message, ex); // expose real message
+            //}
             catch (Exception ex)
             {
                 throw new ExternalServiceUnavailableException("Service is temporarily unavailable. Please try again later.", ex);
@@ -144,14 +160,12 @@ namespace Application.Services.Implementations
             var payment = await _paymentRepository.GetPaymentByReferenceAsync(reference);
             if (payment == null)
             {
-                Console.WriteLine($"Payment not found for reference {reference}");
                 return false;
             }
 
             //IDEMPOTENCY CHECK - Prevent duplicate processing
             if (payment.Status == PaymentStatus.Success)
             {
-                Console.WriteLine("DEBUG: Payment already Successful. Exiting to avoid duplicate email.");
                 return true;
             }
 
@@ -162,14 +176,12 @@ namespace Application.Services.Implementations
             {
                 try
                 {
-
                     //Update payment status to Successful
                     payment.Status = PaymentStatus.Success;
                     payment.PaystackResponse = JsonSerializer.Serialize(data); //Store full response for audit
                     payment.UpdatedDate = DateTime.UtcNow;
 
                     await _paymentRepository.UpdatePaymentAsync(payment);
-                    Console.WriteLine("DEBUG: Payment record updated in DB.");
 
                     // Invalidate payment caches
                     await _cacheService.RemoveAsync($"payments:id:{payment.Id}");
@@ -184,39 +196,51 @@ namespace Application.Services.Implementations
 
                         if (loan != null && loan.Status != LoanStatus.Paid)
                         {
-                            loan.Status = LoanStatus.Paid;
+                            // Before marking as paid, compute accrued interest up to now and apply payment
+                            var (projectedAccrued, projectedDate) = LoanInterestCalculator.CalculateProjectedAccrual(loan, DateTime.UtcNow);
+                            loan.AccruedInterest = projectedAccrued;
+                            loan.LastInterestAccrualDate = projectedDate ?? loan.LastInterestAccrualDate;
+
+                            // Apply payment amount: interest first, then principal
+                            decimal remaining = payment.Amount;
+                            if (loan.AccruedInterest > 0)
+                            {
+                                if (remaining >= loan.AccruedInterest)
+                                {
+                                    remaining -= loan.AccruedInterest;
+                                    loan.AccruedInterest = 0m;
+                                }
+                                else
+                                {
+                                    loan.AccruedInterest -= remaining;
+                                    remaining = 0m;
+                                }
+                            }
+
+                            if (remaining > 0 && loan.PrincipalBalance > 0)
+                            {
+                                loan.PrincipalBalance = Math.Max(0, loan.PrincipalBalance - remaining);
+                            }
+
+                            // If outstanding principal fully paid, mark loan as Paid
+                            if (loan.PrincipalBalance <= 0)
+                            {
+                                loan.Status = LoanStatus.Paid;
+                            }
+
                             loan.UpdatedDate = DateTime.UtcNow;
 
                             await _loanRepository.UpdateLoanAsync(loan);
-                            Console.WriteLine("DEBUG: Loan record updated to Paid.");
 
                             // Invalidate loan caches
                             await _cacheService.RemoveAsync($"loans:id:{loan.Id}");
                             await _cacheService.RemoveAsync($"loans:user:{loan.UserProfileId}");
                             await _cacheService.RemoveByPrefixAsync("loans:all:");
 
-                            // Check if history already exists for this loan payment
-                            var historyExists = await _loanHistoryRepository.historyExists(loan.Id);
+                            // Record loan history for this payment
+                            var loanHistory = _mapper.Map<LoanHistory>(loan);
 
-                            if (!historyExists) // Only create if it doesn't exist
-                            {
-                                var loanHistory = new LoanHistory
-                                {
-                                    Id = Guid.NewGuid().ToString(),
-                                    LoanId = loan.Id,
-                                    LoanType = loan.LoanType,
-                                    RequestedAmount = loan.RequestedAmount,
-                                    //ApprovedAmount = loan.ApprovedAmount,
-                                    RequestedDate = loan.RequestedDate,
-                                    UpdatedDate = loan.UpdatedDate,
-                                    Status = LoanStatus.Paid,
-                                    UserProfileId = loan.UserProfileId,
-                                };
-
-                                // Save updates to db
-                                await _loanHistoryRepository.AddLoanHistoryAsync(loanHistory);
-                                Console.WriteLine("DEBUG: History recorded.");
-                            }
+                            await _loanHistoryRepository.AddLoanHistoryAsync(loanHistory);
 
                             // Send notification email to user
                             if (payment.UserProfileId != null)
@@ -224,7 +248,6 @@ namespace Application.Services.Implementations
                                 var user = await _userRepository.GetUserByIdAsync(payment.UserProfileId);
                                 if (user != null)
                                 {
-                                    Console.WriteLine($"DEBUG: Attempting to send email to {user.Email}...");
                                     await _emailService.SendPaymentConfirmationEmailAsync(user, loan, payment);
                                 }
                                 else
@@ -240,6 +263,7 @@ namespace Application.Services.Implementations
                 catch (Exception ex)
                 {
                     Console.WriteLine($"Error verifying payment {reference}: {ex.Message}");
+
                     return false;
                 }
             }
@@ -264,21 +288,15 @@ namespace Application.Services.Implementations
                 getItemCallback: async () =>
                 {
                     var payments = await _paymentRepository.GetPaymentsAsync(status, paymentId, reference);
-                    return payments.Select(p => new PaymentDto
-                    {
-                        Id = p.Id,
-                        LoanId = p.LoanId,
-                        UserProfileId = p.UserProfileId,
-                        Amount = p.Amount,
-                        Status = p.Status,
-                        CreatedDate = p.CreatedDate,
-                    }).ToList();
+
+                    return payments.Select(p => _mapper.Map<PaymentDto>(p)).ToList();
                 },
                 expirationTime: TimeSpan.FromMinutes(10)
             );
 
             return list ?? new List<PaymentDto>();
         }
+
 
         public async Task<PaymentDto?> GetPaymentByIdAsync(string paymentId)
         {
@@ -291,15 +309,8 @@ namespace Application.Services.Implementations
                     var payment = await _paymentRepository.GetPaymentByIdAsync(paymentId);
                     if (payment == null)
                         throw new NotFoundException("Payment not found.");
-                    return new PaymentDto
-                    {
-                        Id = payment.Id,
-                        LoanId = payment.LoanId,
-                        UserProfileId = payment.UserProfileId,
-                        Amount = payment.Amount,
-                        Status = payment.Status,
-                        CreatedDate = payment.CreatedDate,
-                    };
+
+                    return _mapper.Map<PaymentDto>(payment);
                 },
                 expirationTime: TimeSpan.FromMinutes(10)
             );
@@ -318,15 +329,8 @@ namespace Application.Services.Implementations
                     var payment = await _paymentRepository.GetPaymentByReferenceAsync(reference);
                     if (payment == null)
                         throw new NotFoundException("Payment not found.");
-                    return new PaymentDto
-                    {
-                        Id = payment.Id,
-                        LoanId = payment.LoanId,
-                        UserProfileId = payment.UserProfileId,
-                        Amount = payment.Amount,
-                        Status = payment.Status,
-                        CreatedDate = payment.CreatedDate,
-                    };
+
+                    return _mapper.Map<PaymentDto>(payment);
                 },
                 expirationTime: TimeSpan.FromMinutes(10)
             );

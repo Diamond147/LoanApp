@@ -29,7 +29,7 @@ namespace Infrastructure.DbContexts
                 entity.Property(u => u.MobileNumber).HasMaxLength(20);
                 entity.Property(u => u.Nationality).HasMaxLength(100);
 
-                // Index on email for quick lookups
+                // Index on Email for quick lookups
                 entity.HasIndex(u => u.Email).IsUnique();
             });
 
@@ -40,7 +40,9 @@ namespace Infrastructure.DbContexts
                 entity.Property(l => l.Status).HasConversion<string>().IsRequired();
                 entity.Property(l => l.LoanType).HasConversion<string>().IsRequired();
                 entity.Property(l => l.RequestedAmount).HasPrecision(18, 2);
-                //entity.Property(l => l.ApprovedAmount).HasPrecision(18, 2);
+                entity.Property(l => l.PrincipalBalance).HasPrecision(18, 2);
+                entity.Property(l => l.InterestRate).HasPrecision(5, 4);
+                entity.Property(l => l.AccruedInterest).HasPrecision(18, 2);
 
                 // Foreign key to UserProfile
                 entity.HasOne<UserProfile>()
@@ -58,6 +60,9 @@ namespace Infrastructure.DbContexts
                 entity.HasKey(lh => lh.Id);
                 entity.Property(lh => lh.Status).HasConversion<string>().IsRequired();
                 entity.Property(lh => lh.LoanType).HasConversion<string>().IsRequired();
+                entity.Property(lh => lh.PrincipalBalance).HasPrecision(18, 2);
+                entity.Property(lh => lh.InterestRate).HasPrecision(5, 4);
+                entity.Property(lh => lh.AccruedInterest).HasPrecision(18, 2);
 
                 // Foreign key to Loan (explicitly specify dependent navigation to avoid shadow FK)
                 entity.HasOne(lh => lh.Loan)
@@ -76,6 +81,8 @@ namespace Infrastructure.DbContexts
                 entity.Property(p => p.LoanType).HasConversion<string>().IsRequired();
                 entity.Property(p => p.MinAmount).HasPrecision(18, 2);
                 entity.Property(p => p.MaxAmount).HasPrecision(18, 2);
+                entity.Property(p => p.InterestRate).HasPrecision(5, 4);
+
                 entity.HasIndex(p => p.LoanType);
             });
 

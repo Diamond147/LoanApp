@@ -13,7 +13,7 @@ namespace Application.Services.Interfaces.Repositories
         Task<bool> HasUnpaidLoanAsync(string userId);
         Task<Loan?> GetLoanByIdAsync(string loanId);
         Task<Loan?> GetApprovedLoanByUserIdAsync(string userId);
-        Task<Loan?> UpdateLoanStatusAsync(string loanId, LoanStatus newStatus);
+        //Task<Loan?> UpdateLoanStatusAsync(string loanId, LoanStatus newStatus);
         Task UpdateLoanAsync(Loan loan);
         Task<bool> DeleteLoanAsync(string loanId);
 

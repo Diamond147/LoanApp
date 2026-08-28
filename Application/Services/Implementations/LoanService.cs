@@ -1,12 +1,15 @@
-﻿using Application.Exceptions;
+﻿using Application.DTOs;
+using Application.Exceptions;
 using Application.Extensions;
 using Application.Services.Interfaces.ExternalServices;
 using Application.Services.Interfaces.Repositories;
 using Application.Services.Interfaces.Services;
+using AutoMapper;
 using Domain.DTOs.Users.RequestDto;
 using Domain.DTOs.Users.ResponseDto;
 using Domain.Entities;
 using Domain.Enums;
+using Domain.Helpers;
 using Microsoft.AspNetCore.Http;
 
 
@@ -21,9 +24,10 @@ namespace Application.Services.Implementations
         private readonly ILoanHistoryRepository _loanHistoryRepository;
         private readonly IPrequalifiedLoanRepo _prequalifiedLoanRepo;
         private readonly ICacheService _cacheService;
+        private readonly IMapper _mapper;
 
 
-        public LoanService(ILoanRepository loanRepository, IHttpContextAccessor httpContextAccessor, IUserRepository userRepository, IEmailService emailService, ILoanHistoryRepository loanHistoryRepository, IPrequalifiedLoanRepo prequalifiedLoanRepo, ICacheService cacheService)
+        public LoanService(ILoanRepository loanRepository, IHttpContextAccessor httpContextAccessor, IUserRepository userRepository, IEmailService emailService, ILoanHistoryRepository loanHistoryRepository, IPrequalifiedLoanRepo prequalifiedLoanRepo, ICacheService cacheService, IMapper mapper)
         {
             _loanRepository = loanRepository;
             _httpContextAccessor = httpContextAccessor;
@@ -32,6 +36,7 @@ namespace Application.Services.Implementations
             _loanHistoryRepository = loanHistoryRepository;
             _prequalifiedLoanRepo = prequalifiedLoanRepo;
             _cacheService = cacheService;
+            _mapper = mapper;
         }
 
 
@@ -52,35 +57,29 @@ namespace Application.Services.Implementations
             if (existingLoanType == null)
                 throw new NotFoundException($"Loan of type {createLoan.loanType} is not currently available");
 
-            if (createLoan.Amount <= 0)
+            if (createLoan.RequestedAmount <= 0)
                 throw new ValidationException("Requested amount must be greater than zero");
 
-            if (createLoan.Amount < existingLoanType.MinAmount || createLoan.Amount > existingLoanType.MaxAmount)
+            if (createLoan.RequestedAmount < existingLoanType.MinAmount || createLoan.RequestedAmount > existingLoanType.MaxAmount)
                 throw new ValidationException($"Incorrect amount for the {createLoan.loanType} loan type.");
 
             if (createLoan.loanType != existingLoanType.LoanType)
                 throw new ValidationException($"Invalid loan type. Please select a valid loan type.");
 
-            var loan = new Loan
-            {
-                UserProfileId = AuthUserId,
-                LoanType = createLoan.loanType,
-                RequestedAmount = createLoan.Amount,
-                RequestedDate = DateTime.UtcNow,
-                Status = LoanStatus.Pending,
-            };
+            var loan = _mapper.Map<Loan>(createLoan);
+
+            loan.UserProfileId = AuthUserId;
+            loan.Status = LoanStatus.Pending;
+            loan.InterestRate = existingLoanType.InterestRate;
+            loan.AccruedInterest = 0m;
+            loan.PrincipalBalance = createLoan.RequestedAmount;
+            loan.RequestedDate = DateTime.UtcNow;
+
             await _loanRepository.AddLoanAsync(loan);
 
             //History record
-            var loanHistory = new LoanHistory
-            {
-                LoanId = loan.Id,
-                LoanType = loan.LoanType,
-                RequestedAmount = loan.RequestedAmount,
-                RequestedDate = DateTime.UtcNow,
-                Status = loan.Status,
-                UserProfileId = AuthUserId,
-            };
+            var loanHistory = _mapper.Map<LoanHistory>(loan);
+
             await _loanHistoryRepository.AddLoanHistoryAsync(loanHistory);
 
             // Execute ONLY after successful DB saves
@@ -90,50 +89,33 @@ namespace Application.Services.Implementations
             // Invalidate admin/global cached loan lists so the new loan shows up on admin dashboards
             await _cacheService.RemoveByPrefixAsync("loans:all:");
 
-            return new LoanDto
-            {
-                Id = loan.Id,
-                LoanType = loan.LoanType,
-                RequestedAmount = loan.RequestedAmount,
-                RequestedDate = loan.RequestedDate,
-                Status = loan.Status,
-                UserProfileId = loan.UserProfileId
-            };
+            return _mapper.Map<LoanDto>(loan);
         }
 
 
-        public async Task<ContinuationResponse<LoanDto>> GetAllLoansAsync(
-            int pageSize,
-            string? continuationToken,
-            LoanStatus? status,
-            string? loanId)
+        public async Task<ContinuationResponse<LoanDto>> GetAllLoansAsync(int pageSize, string? continuationToken, LoanStatus? status, string? loanId)
         {
             if (pageSize < 1 || pageSize > 100)
-            {
                 throw new NotFoundException("PageSize must be between 1 and 100");
-            }
 
-            // Build a unique cache key incorporating all filter parameters
             string cacheKey = $"loans:all:page={pageSize}:token={continuationToken ?? "none"}:status={status?.ToString() ?? "all"}:id={loanId ?? "none"}";
 
-            // Use GetOrSetAsync (Cache-Aside Pattern)
-            Console.WriteLine("Attempting to cache...");
             var result = await _cacheService.GetOrSetAsync(
                 key: cacheKey,
                 getItemCallback: async () =>
                 {
-                    // Fetch from Repository on Cache Miss
                     var (loans, newContinuationToken) = await _loanRepository.GetAllLoansAsync(pageSize, continuationToken, status, loanId);
 
-                    var loanDtos = loans.Select(loan => new LoanDto
+                    var loanDtos = new List<LoanDto>();
+                    foreach (var loan in loans)
                     {
-                        Id = loan.Id,
-                        LoanType = loan.LoanType,
-                        RequestedAmount = loan.RequestedAmount,
-                        Status = loan.Status,
-                        RequestedDate = loan.RequestedDate,
-                        UserProfileId = loan.UserProfileId,
-                    }).ToList();
+                        var (projectedAccrued, _) = LoanInterestCalculator.CalculateProjectedAccrual(loan, DateTime.UtcNow);
+
+                        // Map entity -> DTO then override projected accrued interest
+                        var dto = _mapper.Map<LoanDto>(loan);
+                        dto.AccruedInterest = projectedAccrued;
+                        loanDtos.Add(dto);
+                    }
 
                     return new ContinuationResponse<LoanDto>
                     {
@@ -142,9 +124,8 @@ namespace Application.Services.Implementations
                         HasMore = !string.IsNullOrEmpty(newContinuationToken)
                     };
                 },
-                expirationTime: TimeSpan.FromMinutes(15) // Cache list results for 15 minutes
+                expirationTime: TimeSpan.FromMinutes(15)
             );
-            Console.WriteLine("Cache set complete");
 
             return result ?? new ContinuationResponse<LoanDto>();
         }
@@ -162,16 +143,13 @@ namespace Application.Services.Implementations
                     if (existingLoan == null)
                         throw new NotFoundException("Loan not found.");
 
+                    var (projectedAccrued, _) = LoanInterestCalculator.CalculateProjectedAccrual(existingLoan, DateTime.UtcNow);
 
-                    return new LoanDto
-                    {
-                        Id = existingLoan.Id,
-                        LoanType = existingLoan.LoanType,
-                        RequestedAmount = existingLoan.RequestedAmount,
-                        RequestedDate = existingLoan.RequestedDate,
-                        Status = existingLoan.Status,
-                        UserProfileId = existingLoan.UserProfileId
-                    };
+                    // Map entity to DTO and set projected accrued interest
+                    var dto = _mapper.Map<LoanDto>(existingLoan);
+                    dto.AccruedInterest = projectedAccrued;
+
+                    return dto;
                 },
                 expirationTime: TimeSpan.FromMinutes(15)
             );
@@ -179,7 +157,6 @@ namespace Application.Services.Implementations
             if (loan == null)
                 throw new NotFoundException("Loan not found.");
 
-            // Ownership Check: Verify the loan belongs to the requesting user
             if (loan.UserProfileId != userId)
                 throw new UnauthorizedException("You are not authorized to view this loan.");
 
@@ -187,7 +164,7 @@ namespace Application.Services.Implementations
         }
 
 
-        public async Task<LoanDto?> UpdateLoanStatusAsync(string loanId, LoanStatus newStatus)
+        public async Task<LoanDto?> UpdateLoanStatusAsync(string loanId, UpdateLoanStatusDto newStatus)
         {
             var loan = await _loanRepository.GetLoanByIdAsync(loanId);
             if (loan == null)
@@ -197,37 +174,33 @@ namespace Application.Services.Implementations
 
             var previousStatus = loan.Status;
 
-            if (previousStatus == newStatus)
+            if (previousStatus == newStatus.NewStatus)
             {
                 var existingUser = await _userRepository.GetUserByIdAsync(loan.UserProfileId);
-                return new LoanDto
-                {
-                    Id = loan.Id,
-                    LoanType = loan.LoanType,
-                    RequestedAmount = loan.RequestedAmount,
-                    Status = loan.Status,
-                    RequestedDate = loan.RequestedDate,
-                    UpdatedDate = loan.UpdatedDate,
-                    UserProfileId = loan.UserProfileId,
-                    //UserName = existingUser != null ? $"{existingUser.FirstName} {existingUser.LastName}" : null
-                };
+
+                return _mapper.Map<LoanDto>(loan);
             }
 
-            loan.Status = newStatus;
+            loan.Status = newStatus.NewStatus;
             loan.UpdatedDate = DateTime.UtcNow;
+
+            // If approving, initialize interest-related fields
+            if (newStatus.NewStatus == LoanStatus.Approved)
+            {
+                var pq = await _prequalifiedLoanRepo.GetPreQualifiedLoanByTypeAsync(loan.LoanType);
+
+                loan.InterestRate = pq?.InterestRate ?? 0.5m; // default 50%
+                loan.PrincipalBalance = loan.PrincipalBalance; // user-requested amount becomes principal balance
+                loan.AccruedInterest = 0m;
+                loan.ApprovalDate = DateTime.UtcNow;
+                loan.LastInterestAccrualDate = DateTime.UtcNow;
+            }
 
             await _loanRepository.UpdateLoanAsync(loan);
 
-            var historyEntry = new LoanHistory
-            {
-                LoanId = loan.Id,
-                LoanType = loan.LoanType,
-                RequestedAmount = loan.RequestedAmount,
-                RequestedDate = loan.RequestedDate,
-                Status = newStatus,
-                UpdatedDate = DateTime.UtcNow,
-                UserProfileId = loan.UserProfileId
-            };
+            var historyEntry = _mapper.Map<LoanHistory>(loan);
+            historyEntry.Status = newStatus.NewStatus;
+            historyEntry.UpdatedDate = DateTime.UtcNow;
 
             await _loanHistoryRepository.AddLoanHistoryAsync(historyEntry);
 
@@ -238,27 +211,18 @@ namespace Application.Services.Implementations
             var user = await _userRepository.GetUserByIdAsync(loan.UserProfileId);
             if (user != null)
             {
-                if (newStatus == LoanStatus.Approved)
+                if (newStatus.NewStatus == LoanStatus.Approved)
                 {
                     await _emailService.SendLoanApprovalEmailAsync(user, loan);
                 }
-                else if (newStatus == LoanStatus.Rejected)
+                else if (newStatus.NewStatus == LoanStatus.Rejected)
                 {
                     await _emailService.SendLoanRejectionEmailAsync(user, loan);
                 }
             }
 
-            return new LoanDto
-            {
-                Id = loan.Id,
-                LoanType = loan.LoanType,
-                RequestedAmount = loan.RequestedAmount,
-                Status = loan.Status,
-                RequestedDate = loan.RequestedDate,
-                UpdatedDate = loan.UpdatedDate,
-                UserProfileId = loan.UserProfileId,
-                //UserName = user != null ? $"{user.FirstName} {user.LastName}" : null
-            };
+            var result = _mapper.Map<LoanDto>(loan);
+            return result;
         }
 
 

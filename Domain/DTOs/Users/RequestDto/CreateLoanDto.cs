@@ -11,8 +11,7 @@ namespace Domain.DTOs.Users.RequestDto
 
 
         [Required(ErrorMessage = "Loan amount is required.")]
-        //[Range(10000.00, 999999.00, ErrorMessage = "Loan amount must be between #10,000 and #999,999.")]
         [DataType(DataType.Currency, ErrorMessage = "Invalid currency format.")]
-        public decimal Amount { get; set; }
+        public decimal RequestedAmount { get; set; }
     }
 }

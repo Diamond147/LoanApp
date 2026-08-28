@@ -7,7 +7,7 @@ namespace Application.Services.Interfaces.Services
 {
     public interface IUserService
     {
-        Task<ContinuationResponse<UserProfileDto>> GetAllUsersDetailsAsync(int pageSize, string? continuationToken, string? userId, string? email, string? mobileNumber, string? gender, string? nationality, string? searchTerm);
+        Task<ContinuationResponse<AllUserDetailsDto>> GetAllUsersDetailsAsync(int pageSize, string? continuationToken, string? userId, string? email, string? mobileNumber, string? gender, string? nationality, string? searchTerm);
         Task<ContinuationResponse<UserProfileDto>> GetAllUsersAsync(int pageSize, string? continuationToken, string? userId);
         Task ChangeUserRoleAsync(string UserId, ChangeRoleDto dto);
         Task<UserProfileDto?> GetUserByIdAsync(string userId);

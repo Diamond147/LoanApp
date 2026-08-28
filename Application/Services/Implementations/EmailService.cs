@@ -4,6 +4,7 @@ using Application.Services.Interfaces.Services;
 using Domain.Entities;
 using Application.Services.Interfaces.ExternalServices;
 using Domain.DTOs.Emails;
+using AutoMapper;
 
 namespace Application.Services.Implementations
 {
@@ -11,11 +12,13 @@ namespace Application.Services.Implementations
     {
         private readonly IEmailClient _emailClient;
         private readonly IEmailRepository _emailRepository;
+        private readonly IMapper _mapper;
 
-        public EmailService(IEmailClient emailClient, IEmailRepository emailRepository)
+        public EmailService(IEmailClient emailClient, IEmailRepository emailRepository, IMapper mapper)
         {
             _emailClient = emailClient;
             _emailRepository=emailRepository;
+            _mapper = mapper;
         }
 
 
@@ -50,18 +53,11 @@ namespace Application.Services.Implementations
             }
 
             // Create log entry for this email attempt. An audit trail of all communications
-            var emailLog = new EmailLog
-            {
-                Id = Guid.NewGuid().ToString(),
-                UserProfileId = emailDto.UserProfileId,
-                EmailAddress = emailDto.EmailAddress,
-                Subject = emailDto.Subject,
-                Body = emailDto.Body,
-                EmailType = emailDto.EmailType,
-                IsSent = emailSent,
-                SentDate = DateTime.UtcNow,
-                ErrorMessage = errorMessage
-            };
+            var emailLog = _mapper.Map<EmailLog>(emailDto);
+            emailLog.Id = Guid.NewGuid().ToString();
+            emailLog.IsSent = emailSent;
+            emailLog.SentDate = DateTime.UtcNow;
+            emailLog.ErrorMessage = errorMessage;
 
             // Even if email failed, we log the attempt to db
             await _emailRepository.AddEmailLogAsync(emailLog);

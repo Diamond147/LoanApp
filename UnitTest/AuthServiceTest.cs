@@ -16,6 +16,7 @@ namespace UnitTest
         private readonly Mock<IUserRepository> _mockUserRepo;
         private readonly Mock<IHttpContextAccessor> _mockHttpContextAccessor;
         private readonly Mock<ITokenService> _mockTokenService;
+        private readonly Mock<AutoMapper.IMapper> _mockMapper;
 
 
         private readonly AuthService _authService;
@@ -25,11 +26,26 @@ namespace UnitTest
             _mockUserRepo = new Mock<IUserRepository>();
             _mockHttpContextAccessor = new Mock<IHttpContextAccessor>();
             _mockTokenService = new Mock<ITokenService>();
+            _mockMapper = new Mock<AutoMapper.IMapper>();
+
+            // Default mapping behavior for CreateUserProfileDto -> UserProfile used in tests
+            _mockMapper.Setup(m => m.Map<Domain.Entities.UserProfile>(It.IsAny<Domain.DTOs.Users.RequestDto.CreateUserProfileDto>()))
+                .Returns((Domain.DTOs.Users.RequestDto.CreateUserProfileDto src) => new Domain.Entities.UserProfile
+                {
+                    FirstName = src.FirstName,
+                    LastName = src.LastName,
+                    Email = src.Email,
+                    Gender = src.Gender,
+                    DateOfBirth = src.DateOfBirth,
+                    MobileNumber = src.MobileNumber,
+                    Nationality = src.Nationality
+                });
 
             _authService = new AuthService(
                 _mockUserRepo.Object,
                 _mockHttpContextAccessor.Object,
-                _mockTokenService.Object
+                _mockTokenService.Object,
+                _mockMapper.Object
             );
         }
 

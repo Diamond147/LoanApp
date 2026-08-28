@@ -1,297 +1,30 @@
-using Application.Services.Implementations;
-using Application.Services.Interfaces.ExternalServices;
-using Application.Services.Interfaces.Repositories;
-using Application.Services.Interfaces.Services;
+
 using DotNetEnv;
-using Infrastructure.DbContexts;
-using Infrastructure.ExternalServices;
-using Infrastructure.ExternalServices.Implementations;
-using Infrastructure.HealthChecks;
-using Infrastructure.Repositories.Implementations;
-using Infrastructure.Repositories.Repositories;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi.Any;
-using Microsoft.OpenApi.Models;
-using Presentation.Filters;
 using Presentation.Middlewares;
-using StackExchange.Redis;
-using System.Security.Claims;
-using System.Security.Cryptography;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using Presentation.Configurations;
 
 
 // Load the .env file into the system environment(requires DotNetEnv package)
 Env.Load();
 
+
 var builder = WebApplication.CreateBuilder(args);
 
 
-// Fetch the PostgreSQL connection string from environment variables or appsettings.json
-var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING")
-    ?? builder.Configuration.GetConnectionString("DefaultConnection");
-
-// Register DbContext for PostgreSQL
-builder.Services.AddDbContext<AppDbContext>(options =>
-{
-    options.UseNpgsql(connectionString, b =>
-        b.MigrationsAssembly("Infrastructure"));
-
-    // In development enable EF Core SQL logging and sensitive data for diagnostics only
-    if (builder.Environment.IsDevelopment())
-    {
-        options.EnableSensitiveDataLogging();
-        options.LogTo(Console.WriteLine, LogLevel.Information);
-    }
-});
-
-
-// Fetch Redis following the postgresDB exact same fallback pattern
-var redisConnectionString = Environment.GetEnvironmentVariable("REDIS_CONNECTION_STRING")
-    ?? builder.Configuration.GetConnectionString("Redis");
-
-// Register Redis Distributed Cache
-builder.Services.AddStackExchangeRedisCache(options =>
-{
-    // The connection string pointing to localhost
-    options.Configuration = redisConnectionString;
-
-    // Optional: Prefixes every key stored in Redis so other apps using Redis don't clash
-    options.InstanceName = "LoanApp_";
-});
-
-// Register IConnectionMultiplexer so RedisCacheService can inject it for key scanning
-builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
-    ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("Redis")!));
-
-
-
-builder.Services.AddHttpContextAccessor();
-
-// Register repositories
-builder.Services.AddScoped<IUserRepository, UserRepository>();
-builder.Services.AddScoped<ILoanRepository, LoanRepository>();
-builder.Services.AddScoped<IAdminRepository, AdminRepository>();
-builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
-builder.Services.AddScoped<IEmailRepository, EmailRepository>();
-builder.Services.AddScoped<IPrequalifiedLoanRepo, PrequalifiedLoanRepo>();
-builder.Services.AddScoped<ILoanHistoryRepository, LoanHistoryRepository>();
-
-// Register services
-builder.Services.AddScoped<IUserService, UserService>();
-builder.Services.AddScoped<IDashboardService, DashboardService>();
-builder.Services.AddScoped<ILoanService, LoanService>();
-builder.Services.AddScoped<IAdminService, AdminService>();
-builder.Services.AddScoped<IPaymentService, PaymentService>();
-builder.Services.AddScoped<IEmailService, EmailService>();
-builder.Services.AddScoped<IPaystackWebhook, PaystackWebhook>();
-builder.Services.AddScoped<ITokenService, TokenService>();
-builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddScoped<IPrequalifiedLoanService, PrequalifiedLoanService>();
-builder.Services.AddScoped<ILoanHistoryService, LoanHistoryService>();
-builder.Services.AddScoped<ICacheService, RedisCacheService>();
-
-
-
-// EXTERNAL SERVICES (Paystack)
-builder.Services.AddHttpClient<IPaystackClient, PaystackClient>((serviceProvider, client) =>
-{
-    // HttpClient is configured here, but actual setup happens in PaystackClient constructor
-    // We just need to register it with DI container
-})
-.ConfigureHttpClient((serviceProvider, client) =>
-{
-    // Additional HttpClient configuration if needed
-    client.Timeout = TimeSpan.FromSeconds(30); // 30 second timeout
-});
-
-
-// Register PaystackClient with secret key from environment variables
-builder.Services.AddScoped<IPaystackClient>(provider =>
-{
-    var httpClient = provider.GetRequiredService<HttpClient>();
-
-    // Read Paystack secret key from environment variable (for security)
-    var secretKey = Environment.GetEnvironmentVariable("Paystack__SecretKey")
-        ?? throw new InvalidOperationException("Paystack__SecretKey environment variable is missing");
-
-    return new PaystackClient(httpClient, secretKey);
-});
-
-
-// Register SendGrid Email Client (falls back to NoOp in local dev if key is missing)
-builder.Services.AddScoped<IEmailClient>(provider =>
-{
-    var configuration = provider.GetRequiredService<IConfiguration>();
-
-    var apiKey = Environment.GetEnvironmentVariable("SendGrid__ApiKey")
-    ?? configuration["SendGrid:ApiKey"];
-
-    var senderEmail = Environment.GetEnvironmentVariable("SendGrid__SenderEmail")
-        ?? configuration["SendGrid:SenderEmail"];
-
-    if (string.IsNullOrEmpty(apiKey) || string.IsNullOrEmpty(senderEmail))
-    {
-        Console.WriteLine("SendGrid credentials missing. Falling back to NoOpEmailClient.");
-        return new NoOpEmailClient();
-    }
-
-    return new SendGridEmailClient(apiKey, senderEmail);
-});
-
-
-// Configure Cross-Origin Resource Sharing (CORS).
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowFrontend", policy =>
-    {
-        policy.WithOrigins(
-            "http://localhost:3000",  // React default
-            "http://localhost:4200",  // Angular default
-            "http://localhost:5173"   // Vite default
-        )
-        .AllowAnyMethod()      // Allow GET, POST, PUT, DELETE, etc.
-        .AllowAnyHeader()      // Allow any headers
-        .AllowCredentials();   // Allow cookies and auth tokens
-    });
-});
-
-
-// Add controllers with JSON options
-builder.Services.AddControllers()
-    .AddJsonOptions(options =>
-    {
-        // Display enums as strings in JSON responses
-        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
-        options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
-    });
-
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
-builder.Services.AddEndpointsApiExplorer();
-
-//Swagger OAuth2 configuration (currently disabled - add your auth provider config here)
-builder.Services.AddSwaggerGen(c =>
-{
-    c.SwaggerDoc("v1", new OpenApiInfo
-    {
-        Title = "Loan Application API",
-        Version = "v1",
-        Description = "Endpoints for the loan application system"
-    });
-
-    // Add the custom enum schema filter
-    c.SchemaFilter<EnumSchemaFilter>();
-
-    // Strip "string" defaults from all query parameters globally
-    c.OperationFilter<SwaggerClearQueryParametersFilter>();
-
-    //Display enums as strings in Swagger UI
-    c.UseInlineDefinitionsForEnums();
-
-    // Forces Swagger to ignore validation attributes when generating examples
-    c.SupportNonNullableReferenceTypes();
-
-    // Globally tells Swagger to use simple placeholders instead of fuzzing regex patterns
-    c.MapType<string>(() => new OpenApiSchema { Type = "string", Example = new OpenApiString("string") });
-
-    // Add OAuth2 security definition when you have an auth provider configured
-    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-    {
-        Description = "JWT Authorization header using the Bearer scheme.",
-        Name = "Authorization",
-        In = ParameterLocation.Header,
-        Type = SecuritySchemeType.ApiKey,
-        Scheme = "Bearer"
-    });
-
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement
-    {
-        {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                },
-                Scheme = "oauth2",
-                Name = "Bearer",
-                In = ParameterLocation.Header
-            },
-            new List<string>()
-        }
-    });
-});
-
-
-{
-    // Configure JWT Authentication globally for both Dev and Prod environments, validate incoming JWTs using configured RSA public key (RS256)
-    builder.Services.AddAuthentication(options =>
-    {
-        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-    })
-    .AddJwtBearer(options =>
-    {   
-        // Fetch and decode the Base64 Public Key from configuration
-        var publicKeyBase64 = builder.Configuration["Jwt:RsaPublicKey"]?.Trim()
-            ?? throw new InvalidOperationException("RSA Public Key is missing");
-
-        var rsa = RSA.Create();
-        rsa.ImportRSAPublicKey(Convert.FromBase64String(publicKeyBase64), out _);
-
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidAudience = builder.Configuration["Jwt:Audience"],
-
-        // Use the Asymmetric RsaSecurityKey
-            IssuerSigningKey = new RsaSecurityKey(rsa),
-
-        // Strictly enforce RS256 algorithm
-            ValidAlgorithms = new[] { SecurityAlgorithms.RsaSha256 },
-
-        // Map the "role" claim to the standard ClaimTypes.Role for Role-Based Authorization (RBAC).
-            RoleClaimType = ClaimTypes.Role
-        };
-
-        options.Events = new JwtBearerEvents
-        {
-            OnMessageReceived = context =>
-            {
-                // Intercept the request to extract the token from a secure HttpOnly cookie
-                if (context.Request.Cookies.TryGetValue("X-Access-Token", out var token))
-                {
-                    context.Token = token;
-                }
-                return Task.CompletedTask;
-            },
-            OnAuthenticationFailed = context =>
-            {
-                Console.WriteLine($"Token validation failed: {context.Exception.Message}");
-                return Task.CompletedTask;
-            }
-        };
-    });
-
-    builder.Services.AddAuthorization();
-}
-
-
-builder.Services.AddHttpClient<PaystackHealthCheck>();
-
-// Register All Health Checks
-builder.Services.AddHealthChecks()
-    .AddCheck("postgres_db", new PostgresHealthCheck(connectionString!), tags: new[] { "ready" })
-    .AddCheck<PaystackHealthCheck>("paystack_api", tags: new[] { "ready" });
+// Configure services by delegating to configuration extension methods
+builder.Services.AddDatabase(builder.Configuration, builder.Environment);
+builder.Services.AddRedis(builder.Configuration);
+builder.Services.AddRepositories();
+builder.Services.AddApplicationServices(builder.Configuration);
+builder.Services.AddExternalServices(builder.Configuration);
+builder.Services.AddCorsPolicy();
+builder.Services.AddControllersWithJsonOptions();
+builder.Services.AddSwaggerDocumentation();
+builder.Services.ConfigureJwtAuthentication(builder.Configuration);
+builder.Services.AddHealthChecksConfiguration(builder.Configuration);
 
 
 var app = builder.Build();
@@ -341,43 +74,15 @@ app.MapHealthChecks("/health/live", new HealthCheckOptions
 app.MapHealthChecks("/health/ready", new HealthCheckOptions
 {
     Predicate = check => check.Tags.Contains("ready"),
-    ResponseWriter = WriteHealthCheckResponse
+    ResponseWriter = HealthResponseWriter.WriteHealthCheckResponse
 });
 
 app.MapHealthChecks("/health", new HealthCheckOptions
 {
-    ResponseWriter = WriteHealthCheckResponse
+    ResponseWriter = HealthResponseWriter.WriteHealthCheckResponse
 });
 
 
 app.MapControllers();
 
 app.Run();
-
-
-
-
-// Custom Response Formatter for Detailed JSON Output
-static Task WriteHealthCheckResponse(HttpContext context, HealthReport report)
-{
-    context.Response.ContentType = "application/json";
-
-    var response = new
-    {
-        status = report.Status.ToString(),
-        totalDuration = report.TotalDuration.TotalMilliseconds + " ms",
-        checks = report.Entries.Select(e => new
-        {
-            name = e.Key,
-            status = e.Value.Status.ToString(),
-            duration = e.Value.Duration.TotalMilliseconds + " ms",
-            error = e.Value.Exception?.Message,
-            tags = e.Value.Tags
-        })
-    };
-
-    return context.Response.WriteAsync(JsonSerializer.Serialize(response, new JsonSerializerOptions
-    {
-        WriteIndented = true
-    }));
-}

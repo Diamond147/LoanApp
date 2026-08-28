@@ -1,4 +1,5 @@
 ﻿
+using Application.DTOs;
 using Application.Services.Interfaces.Services;
 using Domain.DTOs.Users.RequestDto;
 using Domain.Enums;
@@ -62,10 +63,10 @@ namespace Presentation.Controllers
 
         [Authorize(Roles = "Admin")]
         [HttpPost("{loanId}/status")]
-        public async Task<IActionResult> UpdateLoanStatus(string loanId, [FromBody] LoanStatus newStatus)
+        public async Task<IActionResult> UpdateLoanStatus(string loanId, [FromBody] UpdateLoanStatusDto newStatus)
         {
             var result = await _loanService.UpdateLoanStatusAsync(loanId, newStatus);
-            return Ok(new { message = $"Loan {newStatus} Successfully", data = result });
+            return Ok(new { message = $"Loan {newStatus.NewStatus} Successfully", data = result });
         }
 
 

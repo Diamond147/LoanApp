@@ -8,6 +8,7 @@ namespace Domain.DTOs.Users.ResponseDto
         public LoanType? LoanType { get; set; }
         public decimal MinAmount { get; set; }
         public decimal MaxAmount { get; set; }
+        public decimal InterestRate { get; set; }
         public int LoanTenureInMonths { get; set; }
         public DateTime CreatedAt { get; set; }
     }

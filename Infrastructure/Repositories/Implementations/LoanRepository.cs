@@ -113,55 +113,55 @@ namespace Infrastructure.Repositories.Repositories
         }
 
 
-        public async Task<Loan?> UpdateLoanStatusAsync(string loanId, LoanStatus newStatus)
-        {
-            var loan = await _context.Loans.FirstOrDefaultAsync(l => l.Id == loanId);
-            if (loan == null)
-                return null;
+        //public async Task<Loan?> UpdateLoanStatusAsync(string loanId, LoanStatus newStatus)
+        //{
+        //    var loan = await _context.Loans.FirstOrDefaultAsync(l => l.Id == loanId);
+        //    if (loan == null)
+        //        return null;
 
-            // Don't update if already in the same status
-            if (loan.Status == newStatus)
-                return loan;
+        //    // Don't update if already in the same status
+        //    if (loan.Status == newStatus)
+        //        return loan;
 
-            if (newStatus == LoanStatus.Paid && loan.Status != LoanStatus.Approved)
-            {
-                throw new InvalidOperationException("Only approved loans can be marked as paid.");
-            }
+        //    if (newStatus == LoanStatus.Paid && loan.Status != LoanStatus.Approved)
+        //    {
+        //        throw new InvalidOperationException("Only approved loans can be marked as paid.");
+        //    }
 
-            // Now update the status
-            loan.Status = newStatus;
-            loan.UpdatedDate = DateTime.UtcNow;
+        //    // Now update the status
+        //    loan.Status = newStatus;
+        //    loan.UpdatedDate = DateTime.UtcNow;
 
-            if (newStatus == LoanStatus.Approved)
-            {
-                loan.RequestedAmount = loan.RequestedAmount;
-                loan.UpdatedDate = DateTime.UtcNow;
-            }
-            else if (newStatus == LoanStatus.Rejected)
-            {
-                loan.RequestedAmount = 0;
-                loan.UpdatedDate = null;
-            }
+        //    if (newStatus == LoanStatus.Approved)
+        //    {
+        //        loan.RequestedAmount = loan.RequestedAmount;
+        //        loan.UpdatedDate = DateTime.UtcNow;
+        //    }
+        //    else if (newStatus == LoanStatus.Rejected)
+        //    {
+        //        loan.RequestedAmount = 0;
+        //        loan.UpdatedDate = null;
+        //    }
 
-            // Create history record
-            var history = new LoanHistory
-            {
-                Id = Guid.NewGuid().ToString(),
-                LoanId = loan.Id,
-                LoanType = loan.LoanType,
-                RequestedAmount = loan.RequestedAmount,
-                //ApprovedAmount = loan.ApprovedAmount,
-                RequestedDate = loan.RequestedDate,
-                UpdatedDate = loan.UpdatedDate,
-                Status = newStatus,
-                UserProfileId = loan.UserProfileId,
-            };
+        //    // Create history record
+        //    var history = new LoanHistory
+        //    {
+        //        Id = Guid.NewGuid().ToString(),
+        //        LoanId = loan.Id,
+        //        LoanType = loan.LoanType,
+        //        RequestedAmount = loan.RequestedAmount,
+        //        //ApprovedAmount = loan.ApprovedAmount,
+        //        RequestedDate = loan.RequestedDate,
+        //        UpdatedDate = loan.UpdatedDate,
+        //        Status = newStatus,
+        //        UserProfileId = loan.UserProfileId,
+        //    };
 
-            await _context.LoanHistories.AddAsync(history);
-            await _context.SaveChangesAsync();
+        //    await _context.LoanHistories.AddAsync(history);
+        //    await _context.SaveChangesAsync();
 
-            return loan;
-        }
+        //    return loan;
+        //}
 
 
         public async Task<bool> DeleteLoanAsync(string loanId)

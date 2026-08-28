@@ -4,6 +4,7 @@ using Application.Exceptions;
 using Domain.DTOs.Users.ResponseDto;
 using Application.Services.Interfaces.Repositories;
 using Application.Services.Interfaces.ExternalServices;
+using AutoMapper;
 
 namespace Application.Services.Implementations
 {
@@ -11,11 +12,13 @@ namespace Application.Services.Implementations
     {
         private readonly IUserRepository _userRepository;
         private readonly ICacheService _cacheService;
+        private readonly IMapper _mapper;
 
-        public DashboardService(IUserRepository userRepository, ICacheService cacheService)
+        public DashboardService(IUserRepository userRepository, ICacheService cacheService, IMapper mapper)
         {
             _userRepository = userRepository;
             _cacheService = cacheService;
+            _mapper = mapper;
         }
 
 
@@ -133,40 +136,13 @@ namespace Application.Services.Implementations
         {
             return new LoanDashboardDto
             {
-                User = new UserProfileDto   //Maps UserProfile properties to DTO 
-                {
-                    Id = user.Id,
-                    FirstName = user.FirstName,
-                    LastName = user.LastName,
-                    Gender = user.Gender,
-                    Email = user.Email,
-                    MobileNumber = user.MobileNumber,
-                    DateOfBirth = user.DateOfBirth,
-                    Nationality = user.Nationality,
-                    SignUpDate = user.SignUpDate
-                },
+                User = _mapper.Map<UserProfileDto>(user),
 
-                Loans = user.Loans
-                .Select(l => new LoanDto
-                {
-                    Id = l.Id,
-                    LoanType = l.LoanType,
-                    RequestedAmount = l.RequestedAmount,
-                    Status = l.Status,
-                    UserProfileId = l.UserProfileId
-                }).ToList(),
+                Loans = user.Loans.Select(l => _mapper.Map<LoanDto>(l)).ToList(),
 
                 LoanHistory = user.Loans
                 .SelectMany(l => l.LoanHistories)
-                .Select(lh => new LoanHistoryDto
-                {
-                    Id = lh.Id,
-                    LoanType = lh.LoanType,
-                    RequestedAmount = lh.RequestedAmount,
-                    RequestedDate = lh.RequestedDate,
-                    Status = lh.Status, 
-                    UserProfileId = lh.UserProfileId
-                }).ToList()
+                .Select(lh => _mapper.Map<LoanHistoryDto>(lh)).ToList()
             };
         }
     }

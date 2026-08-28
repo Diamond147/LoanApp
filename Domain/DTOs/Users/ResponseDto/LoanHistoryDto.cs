@@ -8,6 +8,9 @@ namespace Domain.DTOs.Users.ResponseDto
         public string? LoanId { get; set; }
         public LoanType? LoanType { get; set; }
         public decimal RequestedAmount { get; set; }
+        public decimal? OutstandingAmount { get; set; }
+        public decimal? InterestRate { get; set; }
+        public decimal? AccruedInterest { get; set; }
         public DateTime RequestedDate { get; set; }
         public DateTime? UpdatedDate { get; set; }
         public LoanStatus Status { get; set; }

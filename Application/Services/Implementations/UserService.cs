@@ -8,6 +8,8 @@ using Domain.DTOs.Users.ResponseDto;
 using Domain.Entities;
 using Microsoft.AspNetCore.Http;
 using System.Security.Claims;
+using AutoMapper;
+using System.Globalization;
 
 
 namespace Application.Services.Implementations
@@ -17,17 +19,19 @@ namespace Application.Services.Implementations
         private readonly IUserRepository _userRepository;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly ICacheService _cacheService;
+        private readonly IMapper _mapper;
 
-        public UserService(IUserRepository userRepository, IHttpContextAccessor httpContextAccessor, ICacheService cacheService)
+        public UserService(IUserRepository userRepository, IHttpContextAccessor httpContextAccessor, ICacheService cacheService, IMapper mapper)
         {
             _userRepository = userRepository;
             _httpContextAccessor = httpContextAccessor;
             _cacheService = cacheService;
+            _mapper = mapper;
         }
 
 
         // All Users Details with their Loans and Loan Histories
-        public async Task<ContinuationResponse<UserProfileDto>> GetAllUsersDetailsAsync(int pageSize, string? continuationToken, string? userId, string? email, string? mobileNumber, string? gender, string? nationality, string? searchTerm)
+        public async Task<ContinuationResponse<AllUserDetailsDto>> GetAllUsersDetailsAsync(int pageSize, string? continuationToken, string? userId, string? email, string? mobileNumber, string? gender, string? nationality, string? searchTerm)
         {
             if (pageSize < 1 || pageSize > 100)
             {
@@ -52,15 +56,15 @@ namespace Application.Services.Implementations
                     var (users, nextToken) = await _userRepository.GetAllUsersDetailsAsync(pageSize, continuationToken, userId, email, mobileNumber, gender, nationality, searchTerm);
                     if (!users.Any())
                     {
-                        return new ContinuationResponse<UserProfileDto>
+                        return new ContinuationResponse<AllUserDetailsDto>
                         {
-                            Data = new List<UserProfileDto>(),
+                            Data = new List<AllUserDetailsDto>(),
                             ContinuationToken = null,
                             HasMore = false
                         };
                     }
 
-                    var userDetails = new List<UserProfileDto>();
+                    var userDetails = new List<AllUserDetailsDto>();
 
                     foreach (var user in users)
                     {
@@ -69,51 +73,23 @@ namespace Application.Services.Implementations
                             .SelectMany(l => l.LoanHistories ?? new List<LoanHistory>())
                             .ToList() ?? new List<LoanHistory>();
 
-                        var userDetail = new UserProfileDto
+                        var userDetail = _mapper.Map<AllUserDetailsDto>(user);
                         {
-                            Id = user.Id,
-                            FirstName = user.FirstName,
-                            LastName = user.LastName,
-                            Email = user.Email,
-                            MobileNumber = user.MobileNumber,
-                            Gender = user.Gender,
-                            DateOfBirth = user.DateOfBirth,
-                            Nationality = user.Nationality,
-                            SignUpDate = user.SignUpDate,
-
                             // Map loans
-                            Loans = user.Loans?.Select(l => new LoanDto
-                            {
-                                Id = l.Id,
-                                LoanType = l.LoanType,
-                                RequestedAmount = l.RequestedAmount,
-                                Status = l.Status,
-                                RequestedDate = l.RequestedDate,
-                                UpdatedDate = l.UpdatedDate,
-                                UserProfileId = l.UserProfileId,
-                            })
-                                .OrderByDescending(l => l.RequestedDate)
-                                .ToList() ?? new List<LoanDto>(),
-
+                            userDetail.Loans = user.Loans?.Select(l => _mapper.Map<LoanDto>(l))
+                            .OrderByDescending(l => l.RequestedDate)
+                            .ToList() ?? new List<LoanDto>();
+                            
                             // Map loan histories
-                            LoanHistories = (histories ?? Enumerable.Empty<LoanHistory>())
-                            .Select(h => new LoanHistoryDto
-                            {
-                                Id = h.Id,
-                                LoanId = h.LoanId,
-                                LoanType = h.LoanType,
-                                RequestedAmount = h.RequestedAmount,
-                                RequestedDate = h.RequestedDate,
-                                UpdatedDate = h.UpdatedDate,
-                                Status = h.Status,
-                                UserProfileId = h.UserProfileId,
-                            }).OrderByDescending(h => h.RequestedDate)
-                            .ToList() ?? new List<LoanHistoryDto>(),
+                            userDetail.LoanHistories = (histories ?? Enumerable.Empty<LoanHistory>())
+                            .Select(h => _mapper.Map<LoanHistoryDto>(h))
+                            .OrderByDescending(h => h.RequestedDate)
+                            .ToList() ?? new List<LoanHistoryDto>();
                         };
                         userDetails.Add(userDetail);
                     }
 
-                    return new ContinuationResponse<UserProfileDto>
+                    return new ContinuationResponse<AllUserDetailsDto>
                     {
                         Data = userDetails,
                         ContinuationToken = nextToken,
@@ -123,91 +99,9 @@ namespace Application.Services.Implementations
                 expirationTime: TimeSpan.FromMinutes(10)
             );
 
-            return result ?? new ContinuationResponse<UserProfileDto> { Data = new List<UserProfileDto>(), ContinuationToken = null, HasMore = false };
+            return result ?? new ContinuationResponse<AllUserDetailsDto> { Data = new List<AllUserDetailsDto>(), ContinuationToken = null, HasMore = false };
         }
 
-        // All Users Details with their Loans and Loan Histories
-        //public async Task<ContinuationResponse<UserProfileDto>> GetAllUsersDetailsAsync(int pageSize, string? continuationToken, string? userId, string? email, string? mobileNumber, string? gender, string? nationality, string? searchTerm)
-        //{
-        //    if (pageSize < 1 || pageSize > 100)
-        //    {
-        //        throw new ValidationException("PageSize must be between 1 and 100.");
-        //    }
-
-        //    // Get users with their loans
-        //    var (users, nextToken) = await _userRepository.GetAllUsersDetailsAsync(pageSize, continuationToken, userId, email, mobileNumber, gender, nationality, searchTerm);
-        //    if (!users.Any())
-        //    {
-        //        return new ContinuationResponse<UserProfileDto>
-        //        {
-        //            Data = new List<UserProfileDto>(),
-        //            ContinuationToken = null,
-        //            HasMore = false
-        //        };
-        //    }
-
-        //    var userDetails = new List<UserProfileDto>();
-
-        //    foreach (var user in users)
-        //    {
-        //        // Get all histories from all loans for this user
-        //        var histories = user.Loans?
-        //            .SelectMany(l => l.LoanHistories ?? new List<LoanHistory>())
-        //            .ToList() ?? new List<LoanHistory>();
-
-        //        var userDetail = new UserProfileDto
-        //        {
-        //            Id = user.Id,
-        //            FirstName = user.FirstName,
-        //            LastName = user.LastName,
-        //            Email = user.Email,
-        //            MobileNumber = user.MobileNumber,
-        //            Gender = user.Gender,
-        //            DateOfBirth = user.DateOfBirth,
-        //            Nationality = user.Nationality,
-        //            SignUpDate = user.SignUpDate,
-
-        //            // Map loans
-        //            Loans = user.Loans?.Select(l => new LoanDto
-        //            {
-        //                Id = l.Id,
-        //                LoanType = l.LoanType,
-        //                RequestedAmount = l.RequestedAmount,
-        //                //ApprovedAmount = l.ApprovedAmount,
-        //                Status = l.Status,
-        //                RequestedDate = l.RequestedDate,
-        //                UpdatedDate = l.UpdatedDate,
-        //                UserProfileId = l.UserProfileId,
-        //                //UserName = $"{user.FirstName} {user.LastName}"
-        //            })
-        //                .OrderByDescending(l => l.RequestedDate)
-        //                .ToList() ?? new List<LoanDto>(),
-
-        //            // Map loan histories
-        //            LoanHistories = (histories ?? Enumerable.Empty<LoanHistory>())
-        //            .Select(h => new LoanHistoryDto
-        //            {
-        //                Id = h.Id,
-        //                LoanId = h.LoanId,
-        //                LoanType = h.LoanType,
-        //                RequestedAmount = h.RequestedAmount,
-        //                //ApprovedAmount = h.ApprovedAmount,
-        //                RequestedDate = h.RequestedDate,
-        //                UpdatedDate = h.UpdatedDate,
-        //                Status = h.Status,
-        //                UserProfileId = h.UserProfileId,
-        //            }).OrderByDescending(h => h.RequestedDate)
-        //            .ToList() ?? new List<LoanHistoryDto>(),
-        //        };
-        //        userDetails.Add(userDetail);
-        //    }
-        //    return new ContinuationResponse<UserProfileDto>
-        //    {
-        //        Data = userDetails,
-        //        ContinuationToken = nextToken,
-        //        HasMore = nextToken != null,
-        //    };
-        //}
 
 
         // User Management
@@ -229,18 +123,8 @@ namespace Application.Services.Implementations
 
                     foreach (var user in users)
                     {
-                        userDtos.Add(new UserProfileDto
-                        {
-                            Id = user.Id,
-                            FirstName = user.FirstName,
-                            LastName = user.LastName,
-                            Email = user.Email,
-                            Gender = user.Gender,
-                            DateOfBirth = user.DateOfBirth,
-                            MobileNumber = user.MobileNumber,
-                            SignUpDate = user.SignUpDate,
-                            Nationality = user.Nationality,
-                        });
+                        var Dto = _mapper.Map<UserProfileDto>(user);
+                        userDtos.Add(Dto);
                     }
                     return new ContinuationResponse<UserProfileDto>
                     {
@@ -280,7 +164,9 @@ namespace Application.Services.Implementations
             }
 
             user.Role = normalizedRole;
+
             await _userRepository.UpdateUserAsync(user);
+
             // Invalidate caches for this user and user lists
             await _cacheService.RemoveAsync($"users:id:{UserId}");
             await _cacheService.RemoveByPrefixAsync("users:all:");
@@ -300,18 +186,7 @@ namespace Application.Services.Implementations
                     if (user == null)
                         throw new NotFoundException("User not found");
 
-                    return new UserProfileDto
-                    {
-                        Id = user.Id,
-                        FirstName = user.FirstName,
-                        LastName = user.LastName,
-                        Gender = user.Gender,
-                        Email = user.Email,
-                        MobileNumber = user.MobileNumber,
-                        SignUpDate = user.SignUpDate,
-                        Nationality = user.Nationality,
-                        DateOfBirth = user.DateOfBirth
-                    };
+                    return _mapper.Map<UserProfileDto>(user);
                 },
                 expirationTime: TimeSpan.FromMinutes(15)
             );
@@ -353,18 +228,7 @@ namespace Application.Services.Implementations
             await _cacheService.RemoveByPrefixAsync("users:all:");
             await _cacheService.RemoveByPrefixAsync("users:details:");
 
-            return new UserProfileDto
-            {
-                Id = existingUser.Id,
-                FirstName = existingUser.FirstName,
-                LastName = existingUser.LastName,
-                Email = existingUser.Email,
-                Gender = existingUser.Gender,
-                DateOfBirth = existingUser.DateOfBirth,
-                MobileNumber = existingUser.MobileNumber,
-                Nationality = existingUser.Nationality,
-                SignUpDate = existingUser.SignUpDate,
-            };
+            return _mapper.Map<UserProfileDto>(existingUser);
         }
 
 
@@ -388,18 +252,7 @@ namespace Application.Services.Implementations
             await _cacheService.RemoveByPrefixAsync("users:all:");
             await _cacheService.RemoveByPrefixAsync("users:details:");
 
-            return new UserProfileDto
-            {
-                Id = user.Id,
-                FirstName = user.FirstName,
-                LastName = user.LastName,
-                Gender = user.Gender,
-                Email = user.Email,
-                MobileNumber = user.MobileNumber,
-                Nationality = user.Nationality,
-                SignUpDate = user.SignUpDate,
-                DateOfBirth = user.DateOfBirth
-            };
+            return _mapper.Map<UserProfileDto>(user);
         }
 
 

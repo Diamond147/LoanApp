@@ -22,7 +22,7 @@ namespace Presentation.Controllers
         public async Task<IActionResult> CreateUserProfile([FromBody] CreateUserProfileDto dto)
         {
             var userProfile = await _authService.CreateUserProfileAsync(dto);
-            return CreatedAtAction(nameof(CreateUserProfile), new { id = userProfile?.Id }, userProfile);
+            return CreatedAtAction(nameof(CreateUserProfile), new { id = userProfile?.Id }, new { message = "User profile created successfully", data = userProfile });
         }
 
 
@@ -31,7 +31,7 @@ namespace Presentation.Controllers
         public async Task<IActionResult> Login([FromBody] LoginRequestDto request)
         {
             var result = await _authService.LoginAsync(request);
-            return Ok(result);
+            return Ok(new { message = "Login successful", data = result });
         }
 
 

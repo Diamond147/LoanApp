@@ -2,6 +2,7 @@
 using Application.Services.Interfaces.ExternalServices;
 using Application.Services.Interfaces.Repositories;
 using Application.Services.Interfaces.Services;
+using AutoMapper;
 using Domain.DTOs.Users.RequestDto;
 using Domain.DTOs.Users.ResponseDto;
 using Domain.Entities;
@@ -15,11 +16,14 @@ namespace Application.Services.Implementations
         private readonly IUserRepository _userRepository;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly ITokenService _tokenService;
-        public AuthService(IUserRepository userRepository, IHttpContextAccessor httpContextAccessor, ITokenService tokenService)
+        private readonly IMapper _mapper;
+
+        public AuthService(IUserRepository userRepository, IHttpContextAccessor httpContextAccessor, ITokenService tokenService, IMapper mapper)
         {
             _userRepository = userRepository;
             _httpContextAccessor = httpContextAccessor;
             _tokenService = tokenService;
+            _mapper = mapper;
         }
 
 
@@ -49,35 +53,18 @@ namespace Application.Services.Implementations
 
             var isFirstUser = !await _userRepository.AnyAsync();
 
-            // Create new profile
-            var userProfile = new UserProfile
-            {
-                Id = Guid.NewGuid().ToString(),
-                FirstName = createUserProfileDto.FirstName,
-                LastName = createUserProfileDto.LastName,
-                Email = createUserProfileDto.Email,
-                PasswordHash = HashPassword(createUserProfileDto.Password),
-                Role = isFirstUser ? "Admin" : "User", // Automatic promotion for the first account
-                Gender = createUserProfileDto.Gender,
-                DateOfBirth = createUserProfileDto.DateOfBirth,
-                MobileNumber = createUserProfileDto.MobileNumber,
-                Nationality = createUserProfileDto.Nationality,
-                SignUpDate = DateTime.UtcNow
-            };
+            // Use AutoMapper to map incoming DTO to entity, then apply generated fields
+            var userProfile = _mapper.Map<UserProfile>(createUserProfileDto);
+
+            userProfile.Id = Guid.NewGuid().ToString();
+            userProfile.PasswordHash = HashPassword(createUserProfileDto.Password);
+            userProfile.Role = isFirstUser ? "Admin" : "User"; // Automatic promotion for the first account
+            userProfile.SignUpDate = DateTime.UtcNow;
 
             await _userRepository.AddUserAsync(userProfile);
-            return new UserProfileDto
-            {
-                Id = userProfile.Id,
-                FirstName = userProfile.FirstName,
-                LastName = userProfile.LastName,
-                Email = userProfile.Email,
-                Gender = userProfile.Gender,
-                DateOfBirth = userProfile.DateOfBirth,
-                MobileNumber = userProfile.MobileNumber,
-                Nationality = userProfile.Nationality,
-                SignUpDate = DateTime.UtcNow
-            };
+
+            // Map saved entity back to response DTO
+            return _mapper.Map<UserProfileDto>(userProfile);
         }
 
 
@@ -106,12 +93,7 @@ namespace Application.Services.Implementations
             httpContext.Response.Cookies.Append("X-Access-Token", token, cookieOptions);
 
             // Return profile data to the frontend without exposing the raw token string
-            return new LoginResponseDto
-            {
-                Email = user.Email,
-                FirstName = user.FirstName,
-                LastName = user.LastName
-            };
+            return _mapper.Map<LoginResponseDto>(user);
         }
 
 

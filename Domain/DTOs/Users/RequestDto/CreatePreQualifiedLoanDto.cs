@@ -20,7 +20,12 @@ namespace Domain.DTOs.Users.RequestDto
         [DataType(DataType.Currency, ErrorMessage = "Invalid currency format.")]
         public decimal MaxAmount { get; set; }
 
-        
+
+        [Required(ErrorMessage = "Interest rate is required.")]
+        [Range(0.5, 0.5, ErrorMessage = "Interest rate must be exactly 0.5 (50%).")]
+        public decimal InterestRate { get; set; }
+
+
         [Required(ErrorMessage = "Loan tenure is required.")]
         [Range(3, 72, ErrorMessage = "Loan tenure must be between 3 and 72 months.")]
         [DataType(DataType.Text, ErrorMessage = "Invalid loan tenure format.")]
