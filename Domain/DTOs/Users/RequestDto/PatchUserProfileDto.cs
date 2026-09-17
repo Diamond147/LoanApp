@@ -8,13 +8,13 @@ namespace Domain.DTOs.Users.RequestDto
         [Required(ErrorMessage = "First name is required.")]
         [StringLength(50, MinimumLength = 2, ErrorMessage = "First name must be between 2 and 50 characters.")]
         [RegularExpression(@"^[a-zA-Z\s]+$", ErrorMessage = "First name can only contain letters.")]
-        public string FirstName { get; set; } = string.Empty;
+        public string? FirstName { get; set; } 
 
 
         [Required(ErrorMessage = "Last name is required.")]
         [StringLength(50, MinimumLength = 2, ErrorMessage = "Last name must be between 2 and 50 characters.")]
         [RegularExpression(@"^[a-zA-Z\s]+$", ErrorMessage = "Last name can only contain letters.")]
-        public string LastName { get; set; } = string.Empty;
+        public string? LastName { get; set; } 
 
 
         [Required(ErrorMessage = "Mobile number is required.")]

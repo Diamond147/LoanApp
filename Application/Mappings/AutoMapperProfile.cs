@@ -13,8 +13,8 @@ namespace Application.Mappings
         public AutoMapperProfile()
         {
             // Source -> Destination
-            // ForMembers are only applied where property names differ or values need transforming, and
-            // simple 1:1 mappings are only applied where property names are identical/aligned.
+            // simple 1:1 mappings CreateMap<>() are only applied where property names are identical/aligned.
+            // ForMembers are only applied where property names differ or values need transforming
 
             // User mappings
             CreateMap<CreateUserProfileDto, UserProfile>();

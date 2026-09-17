@@ -64,7 +64,9 @@ namespace Application.Services.Implementations
             await _userRepository.AddUserAsync(userProfile);
 
             // Map saved entity back to response DTO
-            return _mapper.Map<UserProfileDto>(userProfile);
+            var result = _mapper.Map<UserProfileDto>(userProfile);
+
+            return result;
         }
 
 
@@ -93,7 +95,9 @@ namespace Application.Services.Implementations
             httpContext.Response.Cookies.Append("X-Access-Token", token, cookieOptions);
 
             // Return profile data to the frontend without exposing the raw token string
-            return _mapper.Map<LoginResponseDto>(user);
+            var result =  _mapper.Map<LoginResponseDto>(user);
+
+            return result;
         }
 
 
